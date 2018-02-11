@@ -1,26 +1,11 @@
-clear, latex
+clear, latex_fonts
 
-% omega = 2*pi*40e3;
-
-c_0 = 346.13;
-omega = 2*pi*c_0/0.2*23.25;
-k = omega/c_0; %Vågtal
-r = 10e-3;
-P_0 = 1e3;
-
-generera_p;
-
-T_pos = [0.1 0 0.05;
-         -0.1 0 0.05];
-T_pitch =[pi; %vinkel mellan proj(normalen) och x-axeln, 0 är i x-led
-         0];
-T_yaw = [0; %vinkel mellan radiellt led och z-axeln, 0 är i radiellt led
-         0];
-
-
-x_vekt = linspace(-0.1,0.1,500);
-y_vekt = linspace(-0.1,0.1,500);
-z_vekt = linspace(0,0.1,500);
+Transducer.clear_all()
+Transducer.add_circle([0,0,1]*1e-2,12,4e-2,[0 1 0],pi,pi/4,pi)
+           
+x_vekt = linspace(-0.1,0.1,100);
+y_vekt = linspace(-0.1,0.1,100);
+z_vekt = linspace(0,0.1,100);
 
 %Plotta i planet y = 0
 [x,z] = meshgrid(x_vekt, z_vekt);
@@ -29,45 +14,27 @@ z_vekt = linspace(0,0.1,500);
 r_far = 0.01;%2*(0.01)^2*40e3/c_0;
 
 y = 0;
-p_sum = zeros(size(x));
-px_sum = zeros(size(x));
-py_sum = zeros(size(x));
-pz_sum = zeros(size(x));
-stryk = zeros(size(x));
-for i = 1:size(T_pos,1)
-    x_trans = x - T_pos(i,1);
-    y_trans = y - T_pos(i,2);
-    z_trans = z - T_pos(i,3);
-    
-    cy = cos(T_yaw(i));
-    sy = sin(T_yaw(i));
-    cp = cos(T_pitch(i));
-    sp = sin(T_pitch(i));
-    
-    x_rot = x_trans.*cy.*cp - y_trans.*cy.*sp - z_trans.*sy;
-    y_rot = x_trans.*sp     + y_trans.*cp;
-    z_rot = x_trans.*sy.*cp - y_trans.*sy.*sp + z_trans.*cy;
-    
-    p_sum = p_sum + p(x_rot, y_rot, z_rot);
-    px_sum = px_sum + px(x_rot, y_rot, z_rot);
-    py_sum = py_sum + py(x_rot, y_rot, z_rot);
-    pz_sum = pz_sum + pz(x_rot, y_rot, z_rot);
-    stryk = stryk | ((x_rot.^2 + y_rot.^2 + z_rot.^2) < r_far.^2);
-end
-% x(stryk) = NaN;
-% z(stryk) = NaN;
-% p_sum(stryk) = NaN;
-% px_sum(stryk) = NaN;
-% py_sum(stryk) = NaN;
-% pz_sum(stryk) = NaN;
+[p_sum,px_sum,py_sum,pz_sum,near] = Transducer.total_tryck([x(:) y*ones(size(x,1)*size(x,2),1) z(:)]);
+p_sum = reshape(p_sum,size(x));
+px_sum = reshape(px_sum,size(x));
+py_sum = reshape(py_sum,size(x));
+pz_sum = reshape(pz_sum,size(x));
+near = reshape(near,size(x));
+
+x(near) = NaN;
+z(near) = NaN;
+p_sum(near) = NaN;
+px_sum(near) = NaN;
+py_sum(near) = NaN;
+pz_sum(near) = NaN;
 
 isolines = logspace(0,2.4,50);
 isolines = exp(isolines);
 figure(1)
-contourf(x,z,abs(p_sum),isolines)
+contourf(x*1e2,z*1e2,abs(p_sum),isolines)
 title('Tryck $p$')
-xlabel('x [m]')
-ylabel('z [m]')
+xlabel('x [cm]')
+ylabel('z [cm]')
 colorbar
 axis tight
 caxis([4 9e4])
@@ -87,7 +54,7 @@ caxis([0 1e-5])
 figure(3),clf,hold on
 [u,v] = gradient(gor,x_vekt,z_vekt);
 u = -u; v = -v;
-skip = 20;
+skip = 1;
 u_plot = u(1:skip:end,1:skip:end);
 max = 2e-3;
 u_plot(abs(u_plot) > max) = sign(u_plot(abs(u_plot) > max))*max;
