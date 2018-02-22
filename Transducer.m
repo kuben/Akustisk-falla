@@ -14,7 +14,7 @@ classdef Transducer
         r_far = 0.01;
         x_min = -5e-2; x_max = 5e-2;
         y_min = -5e-2; y_max = 5e-2;
-        z_min = -5e-2; z_max = 10e-2;
+        z_min = -7e-2; z_max = 7e-2;
         plane_n = 100;
    end
     %Instansmetoder
@@ -129,9 +129,9 @@ classdef Transducer
             for T = transducer_list
                 Transducer.draw_single(T);
             end
-            xlim([-5,5]); xlabel('$x$ [cm]')
-            ylim([-5,5]); ylabel('$y$ [cm]')
-            zlim([-5,10]); zlabel('$z$ [cm]')
+            xlim([100*Transducer.x_min,100*Transducer.x_max]); xlabel('$x$ [cm]')
+            ylim([100*Transducer.y_min,100*Transducer.y_max]); ylabel('$y$ [cm]')
+            zlim([100*Transducer.z_min,100*Transducer.z_max]); zlabel('$z$ [cm]')
             axis equal
         end
         function draw_single(T)
@@ -230,7 +230,7 @@ classdef Transducer
             
             % Beräkna laplace om den ska plottas eller användas sen
             if(~isempty([fig_num_ddg])) 
-                lapl = divergence(u,v,w,X,Y,Z);
+                lapl = divergence(X,Y,Z,u,v,w);
             end
             
             
@@ -250,7 +250,7 @@ classdef Transducer
                 % isolines = exp(isolines);
                 Transducer.figure(fig_num_g,'Slices av gorkovpotential $[\mathrm{Nm}]$')
                 Transducer.slice(X,Y,Z,gor,Xi,Yi,Zi);
-                Transducer.contourslice(X,Y,Z,abs(p_sum),Xi,Yi,Zi,isolines);
+                Transducer.contourslice(X,Y,Z,gor,Xi,Yi,Zi,isolines);
                 colorbar, caxis([0 1e-5]), axis tight
                 cmap = colormap;
                 cmap(end,:) = [1 1 1];
@@ -267,23 +267,13 @@ classdef Transducer
             if(~isempty(fig_num_ddg))
                 isolines = logspace(-10,-3,50);
                 Transducer.figure(fig_num_ddg,'$-\nabla^2$ Gorkovpotential')
-                Transducer.slice(X,Y,Z,gor,Xi,Yi,Zi);
-                Transducer.contourslice(X,Y,Z,abs(p_sum),Xi,Yi,Zi,isolines);
-                colorbar, caxis([0 1e-5]), axis tight
-                cmap = colormap;
-                cmap(end,:) = [1 1 1];
-                colormap(cmap);
-                skip = 1;
-
-figure(4)
-
-contourf(X,Z,gor,isolines)
-title()
-xlabel('x [m]')
-ylabel('z [m]')
-colorbar
-axis tight
-caxis([1e-10 1e-5])
+%                 keyboard
+                Transducer.slice(X,Y,Z,sign(lapl).*log(abs(lapl)),Xi,Yi,Zi);
+%                 Transducer.contourslice(X,Y,Z,lapl,Xi,Yi,Zi,isolines);
+%                 colorbar, caxis([-80 60]), axis tight
+% %                 cmap = colormap;
+%                 cmap(end,:) = [1 1 1];
+%                 colormap(cmap);
             end
         end
         function animate()
