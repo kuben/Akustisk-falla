@@ -10,7 +10,13 @@ classdef Transducer
     properties(SetAccess = immutable)
         pos,pitch,yaw
     end
-    
+    properties (Constant)
+        r_far = 0.01;
+        x_min = -5e-2; x_max = 5e-2;
+        y_min = -5e-2; y_max = 5e-2;
+        z_min = -5e-2; z_max = 10e-2;
+        plane_n = 100;
+   end
     %Instansmetoder
     methods
         function obj = Transducer(pos,pitch,yaw)
@@ -49,13 +55,15 @@ classdef Transducer
             %                                   [ x y z ]
             %                                   [ | | | ]   
             tot_p = 0;tot_px = 0;tot_py = 0;tot_pz = 0;near = 0;
-            if nargin < 2 r_far = 0.01; end
+            if nargin < 2 r_far = Transducer.r_far; end
             
+            MemoizedTryck = memoize(@Transducer.tryck);
+            MemoizedTryck.CacheSize = 10000;
             global transducer_list
             for T = transducer_list
                 rel_pos = T.rel_koord(pos);
                 x = rel_pos(:,1);y = rel_pos(:,2);z = rel_pos(:,3);
-                [p,px,py,pz] = Transducer.tryck(x,y,z);
+                [p,px,py,pz] = MemoizedTryck(x,y,z);
                 tot_p = tot_p + p;
                 tot_px = tot_px + px;
                 tot_py = tot_py + py;
@@ -149,6 +157,132 @@ classdef Transducer
            plot3(100*back(:,1),100*back(:,2),100*back(:,3),'k')
            plot3(100*front(:,1),100*front(:,2),100*front(:,3),'k')
         end
+        function draw_plane_at_x(x,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
+            %DRAW_PLANE
+            assert(x >= Transducer.x_min, ['x måste vara >= ' num2str(Transducer.x_min)]);
+            assert(x <= Transducer.x_max, ['x måste vara <= ' num2str(Transducer.x_max)]);
+            
+            x_vekt = [x-0.002 x-0.001 x x+0.001 x+0.002];
+            y_vekt = linspace(Transducer.y_min,Transducer.y_max,Transducer.plane_n);
+            z_vekt = linspace(Transducer.z_min,Transducer.z_max,Transducer.plane_n);
+
+            [Yi,Zi] = meshgrid(y_vekt,z_vekt);
+            Xi = x*ones(size(Yi));
+            
+            Transducer.draw_plane(x_vekt,y_vekt,z_vekt,Xi,Yi,Zi,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
+        end
+        function draw_plane_at_y(y,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
+            %DRAW_PLANE
+            assert(y >= Transducer.y_min, ['y måste vara >= ' num2str(Transducer.y_min)]);
+            assert(y <= Transducer.y_max, ['y måste vara <= ' num2str(Transducer.y_max)]);
+            
+            x_vekt = linspace(Transducer.x_min,Transducer.x_max,Transducer.plane_n);
+            y_vekt = [y-0.002 y-0.001 y y+0.001 y+0.002];
+            z_vekt = linspace(Transducer.z_min,Transducer.z_max,Transducer.plane_n);
+            
+            [Xi,Zi] = meshgrid(x_vekt,z_vekt);
+            Yi = y*ones(size(Xi));
+            
+            Transducer.draw_plane(x_vekt,y_vekt,z_vekt,Xi,Yi,Zi,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
+        end
+        function draw_plane_at_z(z,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
+            %DRAW_PLANE
+            assert(z >= Transducer.z_min, ['z måste vara >= ' num2str(Transducer.z_min)]);
+            assert(z <= Transducer.z_max, ['z måste vara <= ' num2str(Transducer.z_max)]);
+            
+            x_vekt = linspace(Transducer.x_min,Transducer.x_max,Transducer.plane_n);
+            y_vekt = linspace(Transducer.y_min,Transducer.y_max,Transducer.plane_n);
+            z_vekt = [z-0.002 z-0.001 z z+0.001 z+0.002];
+            
+            [Xi,Yi] = meshgrid(x_vekt,y_vekt);
+            Zi = z*ones(size(Xi));
+            
+            Transducer.draw_plane(x_vekt,y_vekt,z_vekt,Xi,Yi,Zi,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
+        end
+        function draw_plane(x_vekt,y_vekt,z_vekt,Xi,Yi,Zi,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
+            if ~exist('fig_num_p','var'), fig_num_p = 1; end
+            if ~exist('fig_num_g','var'), fig_num_g = 2; end
+            if ~exist('fig_num_dg','var'), fig_num_dg = 3; end
+            if ~exist('fig_num_ddg','var'), fig_num_ddg = 4; end
+            
+            [X,Y,Z] = meshgrid(x_vekt,y_vekt,z_vekt);
+            % Beräkna tryck
+            [p_sum,px_sum,py_sum,pz_sum,near] = Transducer.total_tryck([X(:) Y(:) Z(:)]);
+            p_sum = reshape(p_sum,size(X));
+            px_sum = reshape(px_sum,size(X));
+            py_sum = reshape(py_sum,size(X));
+            pz_sum = reshape(pz_sum,size(X));
+            near = reshape(near,size(X));
+            
+            % Beräkna gorkov om den ska plottas eller användas sen
+            if(~isempty([fig_num_g fig_num_dg fig_num_ddg]))
+                gor = gorkov(p_sum, px_sum, py_sum, pz_sum);
+            end
+            
+            % Beräkna gradient om den ska plottas eller användas sen
+            if(~isempty([fig_num_dg fig_num_ddg])) 
+                [u,v,w] = gradient(gor,x_vekt,y_vekt,z_vekt);
+                u = -u; v = -v; w = -w;
+            end
+            
+            % Beräkna laplace om den ska plottas eller användas sen
+            if(~isempty([fig_num_ddg])) 
+                lapl = divergence(u,v,w,X,Y,Z);
+            end
+            
+            
+            %Plotta tryck om fig_num_p inte är tom
+            if(~isempty(fig_num_p))
+                isolines = logspace(0,2.4,50);
+                isolines = exp(isolines);
+                Transducer.figure(fig_num_p,'Slices av tryck $p$ $[\mathrm{Pa}]$')
+                Transducer.slice(X,Y,Z,abs(p_sum),Xi,Yi,Zi);
+                Transducer.contourslice(X,Y,Z,abs(p_sum),Xi,Yi,Zi,isolines);
+                colorbar, caxis([4 9e4]), axis tight
+            end
+
+            %Plotta gorkov om fig_num_g inte är tom
+            if(~isempty(fig_num_p))
+                isolines = logspace(-8,-5,50);
+                % isolines = exp(isolines);
+                Transducer.figure(fig_num_g,'Slices av gorkovpotential $[\mathrm{Nm}]$')
+                Transducer.slice(X,Y,Z,gor,Xi,Yi,Zi);
+                Transducer.contourslice(X,Y,Z,abs(p_sum),Xi,Yi,Zi,isolines);
+                colorbar, caxis([0 1e-5]), axis tight
+                cmap = colormap;
+                cmap(end,:) = [1 1 1];
+                colormap(cmap);
+            end
+            
+            %Plotta gradient om fig_num_dg inte är tom
+            if(~isempty(fig_num_dg))
+                Transducer.figure(fig_num_dg,'$-\nabla$ Gorkovpotential [N]')
+                Transducer.quiver3(X,Y,Z,u,v,w);
+            end
+            
+            %Plotta laplacian om fig_num_ddg inte är tom
+            if(~isempty(fig_num_ddg))
+                isolines = logspace(-10,-3,50);
+                Transducer.figure(fig_num_ddg,'$-\nabla^2$ Gorkovpotential')
+                Transducer.slice(X,Y,Z,gor,Xi,Yi,Zi);
+                Transducer.contourslice(X,Y,Z,abs(p_sum),Xi,Yi,Zi,isolines);
+                colorbar, caxis([0 1e-5]), axis tight
+                cmap = colormap;
+                cmap(end,:) = [1 1 1];
+                colormap(cmap);
+                skip = 1;
+
+figure(4)
+
+contourf(X,Z,gor,isolines)
+title()
+xlabel('x [m]')
+ylabel('z [m]')
+colorbar
+axis tight
+caxis([1e-10 1e-5])
+            end
+        end
         function animate()
             %ANIMATE testfunktion för att se om pitch och yaw funkar
            for pitch = -pi:pi/16:pi
@@ -163,6 +297,36 @@ classdef Transducer
            coord = [d*ones(size(phi)),...
                     r*cos(phi) - r*sin(phi),...
                     r*sin(phi) + r*cos(phi)];
+        end
+        function h1 = slice(X,Y,Z,V,Xi,Yi,Zi)
+            h1 = slice(100*X,100*Y,100*Z,V,100*Xi,100*Yi,100*Zi);
+            h1.FaceAlpha = 0.9;
+            h1.EdgeAlpha = 0;
+        end
+        function h2 = contourslice(X,Y,Z,V,Xi,Yi,Zi,isolines)
+            h2 = contourslice(100*X,100*Y,100*Z,V,100*Xi,100*Yi,100*Zi,isolines);
+            for h=h2(:)'
+                h.LineWidth = 1;
+            end
+        end
+        function quiver3(X,Y,Z,u,v,w)
+            skip = 1; max = 2e-3;
+            u_plot = u(1:skip:end,1:skip:end,1:skip:end);
+            v_plot = v(1:skip:end,1:skip:end,1:skip:end);
+            w_plot = w(1:skip:end,1:skip:end,1:skip:end);
+            u_plot(abs(u_plot) > max) = sign(u_plot(abs(u_plot) > max))*max;
+            v_plot(abs(v_plot) > max) = sign(v_plot(abs(v_plot) > max))*max;
+            w_plot(abs(w_plot) > max) = sign(w_plot(abs(w_plot) > max))*max;
+            x_plot = X(1:skip:end,1:skip:end,1:skip:end);
+            y_plot = Y(1:skip:end,1:skip:end,1:skip:end);
+            z_plot = Z(1:skip:end,1:skip:end,1:skip:end);
+%             keyboard
+            quiver3(100*x_plot,100*y_plot,100*z_plot,u_plot,v_plot,w_plot)
+        end
+        function figure(fig_num,fig_title)
+            figure(fig_num), hold on
+            title(fig_title)
+            xlabel('$x [\mathrm{cm}]$'),ylabel('$y [\mathrm{cm}]$'),zlabel('$z [\mathrm{cm}]$')
         end
     end
 end

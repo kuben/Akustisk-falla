@@ -1,3 +1,6 @@
+%% Låt figurer ha LaTeX fonts
+latex_fonts
+
 %% Lägg till en transducer
 %Argumenten är ([x y z], pitch, yaw)
 %pitch och yaw anger transducerns riktning enligt
@@ -24,6 +27,11 @@ Transducer.add_single(1e-2*[0 0 5],0,-pi/2)
 Transducer.draw_all()
 %Eller Transducer.draw_all(figur_nummer)
 
+%% 
+Transducer.draw_all(1)
+Transducer.draw_plane_at_x(0.03,1,[],[],[])
+Transducer.draw_plane_at_y(0.03,1,[],[],[])
+Transducer.draw_plane_at_z(0.03,1,[],[],[])
 %% OBS Transducers försvinner inte ur listan av sig själva, för att ta bort dem
 Transducer.clear_all()
 
