@@ -8,7 +8,7 @@ classdef Transducer
     
     %immutable = Går inte att ändra position av befintlig transducer
     properties(SetAccess = immutable)
-        pos,pitch,yaw
+        pos,pitch,yaw,phase
     end
     properties (Constant)
         r_far = 0.01;
@@ -19,12 +19,13 @@ classdef Transducer
    end
     %Instansmetoder
     methods
-        function obj = Transducer(pos,pitch,yaw)
+        function obj = Transducer(pos,pitch,yaw,phase)
             %TRANSDUCER([x y z], pitch, yaw) Skapa en transducer
             %   Detailed explanation goes here
             obj.pos = pos;
             obj.pitch = pitch;
             obj.yaw = yaw;
+            obj.phase = phase;
         end
         function rel_pos = rel_koord(this,abs_pos)
             pos_trans = abs_pos - this.pos;
@@ -37,17 +38,17 @@ classdef Transducer
     
     %Klassmetoder
     methods(Static)
-        function [p,px,py,pz] = tryck(x,y,z)
+        function [p,px,py,pz] = tryck(x,y,z,phase)
             % omega = 2*pi*40e3;
             c_0 = 346.13;
             omega = 2*pi*c_0/0.2*23.5;
             k = omega/c_0; %Vågtal
             r = 10e-3;
             P_0 = 1e3;
-            p = (P_0.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(1./2);
-            px = - (P_0.*x.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(3./2) - (P_0.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*((k.*r.*x)./((x.^2 + y.^2).^(1./2).*(x.^2 + y.^2 + z.^2).^(1./2)) - (k.*r.*x.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(3./2)).*besselj(1, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(1./2) + (P_0.*k.*x.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)).*1i)./(x.^2 + y.^2 + z.^2);
-            py = - (P_0.*y.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(3./2) - (P_0.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*((k.*r.*y)./((x.^2 + y.^2).^(1./2).*(x.^2 + y.^2 + z.^2).^(1./2)) - (k.*r.*y.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(3./2)).*besselj(1, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(1./2) + (P_0.*k.*y.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)).*1i)./(x.^2 + y.^2 + z.^2);
-            pz = - (P_0.*z.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(3./2) + (P_0.*k.*z.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)).*1i)./(x.^2 + y.^2 + z.^2) + (P_0.*k.*r.*z.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*(x.^2 + y.^2).^(1./2).*besselj(1, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^2;
+            p = (P_0.*exp((phase + k.*(x.^2 + y.^2 + z.^2).^(1./2)).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(1./2);
+            px = - (P_0.*x.*exp((phase + k.*(x.^2 + y.^2 + z.^2).^(1./2)).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(3./2) - (P_0.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*((k.*r.*x)./((x.^2 + y.^2).^(1./2).*(x.^2 + y.^2 + z.^2).^(1./2)) - (k.*r.*x.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(3./2)).*besselj(1, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(1./2) + (P_0.*k.*x.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)).*1i)./(x.^2 + y.^2 + z.^2);
+            py = - (P_0.*y.*exp((phase + k.*(x.^2 + y.^2 + z.^2).^(1./2)).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(3./2) - (P_0.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*((k.*r.*y)./((x.^2 + y.^2).^(1./2).*(x.^2 + y.^2 + z.^2).^(1./2)) - (k.*r.*y.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(3./2)).*besselj(1, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(1./2) + (P_0.*k.*y.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)).*1i)./(x.^2 + y.^2 + z.^2);
+            pz = - (P_0.*z.*exp((phase + k.*(x.^2 + y.^2 + z.^2).^(1./2)).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(3./2) + (P_0.*k.*z.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)).*1i)./(x.^2 + y.^2 + z.^2) + (P_0.*k.*r.*z.*exp(k.*(x.^2 + y.^2 + z.^2).^(1./2).*1i).*(x.^2 + y.^2).^(1./2).*besselj(1, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^2;
         end
         function [tot_p,tot_px,tot_py,tot_pz,near] = total_tryck(pos,r_far)
             %GET_P returnerar totala trycket och dess derivator
@@ -63,7 +64,7 @@ classdef Transducer
             for T = transducer_list
                 rel_pos = T.rel_koord(pos);
                 x = rel_pos(:,1);y = rel_pos(:,2);z = rel_pos(:,3);
-                [p,px,py,pz] = MemoizedTryck(x,y,z);
+                [p,px,py,pz] = MemoizedTryck(x,y,z,T.phase);
                 tot_p = tot_p + p;
                 tot_px = tot_px + px;
                 tot_py = tot_py + py;
@@ -76,12 +77,13 @@ classdef Transducer
             global transducer_list
             transducer_list = [];
         end
-        function add_single(pos,pitch,yaw)
+        function add_single(pos,pitch,yaw,phase)
+            if ~exist('phase','var'), phase = 0; end
             %ADD_SINGLE Skapar ny transducer och lägger till i listan
             global transducer_list
             transducer_list = [transducer_list Transducer(pos,pitch,yaw)];
         end
-        function add_circle(pos,N,radius,normal,rel_pitch,rel_yaw,phi_0)
+        function add_circle(pos,N,radius,normal,rel_pitch,rel_yaw,phi_0,phase)
             %ADD_CIRCLE Skapar N nya transducers i en cirkel med mittpunkt 
             %           pos, radie radius och normal till cirkelskivan
             %           normal. rel_pitch och rel_yaw är relativt cirkeln
@@ -89,6 +91,7 @@ classdef Transducer
             if nargin < 5 rel_pitch = 0; end
             if nargin < 6 rel_yaw = 0; end
             if nargin < 7 phi_0 = 0; end
+            if ~exist('phase','var'), phase = 0; end
             normal = normal/norm(normal);
             
             phi = phi_0 + linspace(0,2*pi*(1-1/N),N)';%Skapa N vinklar
