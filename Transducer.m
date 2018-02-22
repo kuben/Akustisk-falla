@@ -81,7 +81,7 @@ classdef Transducer
             if ~exist('phase','var'), phase = 0; end
             %ADD_SINGLE Skapar ny transducer och lägger till i listan
             global transducer_list
-            transducer_list = [transducer_list Transducer(pos,pitch,yaw)];
+            transducer_list = [transducer_list Transducer(pos,pitch,yaw,phase)];
         end
         function add_circle(pos,N,radius,normal,rel_pitch,rel_yaw,phi_0,phase)
             %ADD_CIRCLE Skapar N nya transducers i en cirkel med mittpunkt 
@@ -115,7 +115,7 @@ classdef Transducer
             rot_mat = [x; y; z];
             rel_pos = pos + rel_pos*rot_mat;
             for i = 1:N
-                Transducer.add_single(rel_pos(i,:),pi-rel_pitch+phi(i),rel_yaw);
+                Transducer.add_single(rel_pos(i,:),pi-rel_pitch+phi(i),rel_yaw,phase);
             end
         end
         function draw_all(fig_num)
