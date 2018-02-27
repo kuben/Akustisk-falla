@@ -25,7 +25,7 @@ function [laplacian] = lapl(position)
         gor(i) = gorTmp(i);
     end
     [u,v,w] = gradient(gor,x_vekt,y_vekt,z_vekt);
-    u = -u; v = -v; w = -w;
+    u = u; v = v; w = w;
     laplacMat = divergence(u,v,w,X,Y,Z);
 
     [Xdim,Ydim,Zdim] = size(laplacMat);
