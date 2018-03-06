@@ -1,4 +1,4 @@
-function [laplacian_gor] = laplFun(position)
+function [laplacian_gor,gradient_gor] = laplFun(position)
 %LAPL Calculates (the negative of) the laplacian of Gorkov' potential in a point
 %   Detailed explanation goes here
 
@@ -30,6 +30,11 @@ gor = gorkov(p_sum, px_sum, py_sum, pz_sum);
 % Determine the negative of the laplacian of the gorkov potential
 [u,v,w] = gradient(gor,x_vekt,y_vekt,z_vekt);
 u = -u; v = -v; w = -w;
+
+u_grad = mean(u(xyz_index)); % To single out the middle value
+v_grad = mean(v(xyz_index)); % or the mean of the two middle values
+w_grad = mean(w(xyz_index));
+gradient_gor = [u_grad,v_grad,w_grad];
 
 lapl = divergence(X,Y,Z,u,v,w);
 laplacian_gor = mean(mean(mean(lapl(xyz_index,xyz_index,xyz_index))));
