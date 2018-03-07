@@ -1,4 +1,4 @@
-classdef Transducer
+classdef Transducer < handle
     %TRANSDUCER Innehåller information om en transducer
     %   pos               - Läge i rummet
     %   0 < pitch < 2pi     - Rotation (med?urs) sett ovanifrån. 0 är i x-led.
