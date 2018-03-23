@@ -1,14 +1,14 @@
-classdef Transducer
-    %TRANSDUCER InnehÂller information om en transducer
-    %   pos               - L‰ge i rummet
-    %   0 < pitch < 2pi     - Rotation (med?urs) sett ovanifrÂn. 0 ‰r i x-led.
-    %   -pi/2 < yaw < pi/2  - Rotation runt sidoaxel. 0 ‰r i radiellt led,
-    %                       pi/2 uppÂt, -pi/2 nedÂt.
+classdef Transducer < handle
+    %TRANSDUCER Inneh√•ller information om en transducer
+    %   pos               - L√§ge i rummet
+    %   0 < pitch < 2pi     - Rotation (med?urs) sett ovanifr√•n. 0 √§r i x-led.
+    %   -pi/2 < yaw < pi/2  - Rotation runt sidoaxel. 0 √§r i radiellt led,
+    %                       pi/2 upp√•t, -pi/2 ned√•t.
     
     
-    %immutable = GÂr inte att ‰ndra position av befintlig transducer
+    %immutable = G√•r inte att √§ndra position av befintlig transducer
     properties(SetAccess = immutable)
-        pos,pitch,yaw,phase
+        pos,pitch,yaw
     end
     properties (Constant)
         r_far = 0.01;
@@ -17,6 +17,9 @@ classdef Transducer
         z_min = -7e-2; z_max = 7e-2;
         plane_n = 100;
    end
+   properties 
+        phase
+    end
     %Instansmetoder
     methods
         function obj = Transducer(pos,pitch,yaw,phase)
@@ -42,7 +45,7 @@ classdef Transducer
             % omega = 2*pi*40e3;
             c_0 = 346.13;
             omega = 2*pi*c_0/0.2*23.5;
-            k = omega/c_0; %VÂgtal
+            k = omega/c_0; %V√•gtal
             r = 10e-3;
             P_0 = 1e3;
             p = (P_0.*exp((phase + k.*(x.^2 + y.^2 + z.^2).^(1./2)).*1i).*besselj(0, (k.*r.*(x.^2 + y.^2).^(1./2))./(x.^2 + y.^2 + z.^2).^(1./2)))./(x.^2 + y.^2 + z.^2).^(1./2);
@@ -52,7 +55,7 @@ classdef Transducer
         end
         function [tot_p,tot_px,tot_py,tot_pz,near] = total_tryck(pos,r_far)
             %GET_P returnerar totala trycket och dess derivator
-            %       pos pÂ formen [x y z] eller [ | | | ]
+            %       pos p√• formen [x y z] eller [ | | | ]
             %                                   [ x y z ]
             %                                   [ | | | ]   
             tot_p = 0;tot_px = 0;tot_py = 0;tot_pz = 0;near = 0;
@@ -79,15 +82,15 @@ classdef Transducer
         end
         function add_single(pos,pitch,yaw,phase)
             if ~exist('phase','var'), phase = 0; end
-            %ADD_SINGLE Skapar ny transducer och l‰gger till i listan
+            %ADD_SINGLE Skapar ny transducer och l√§gger till i listan
             global transducer_list
             transducer_list = [transducer_list Transducer(pos,pitch,yaw,phase)];
         end
         function add_circle(pos,N,radius,normal,rel_pitch,rel_yaw,phi_0,phase)
             %ADD_CIRCLE Skapar N nya transducers i en cirkel med mittpunkt 
             %           pos, radie radius och normal till cirkelskivan
-            %           normal. rel_pitch och rel_yaw ‰r relativt cirkeln
-            %           sett frÂn normalen
+            %           normal. rel_pitch och rel_yaw √§r relativt cirkeln
+            %           sett fr√•n normalen
             if nargin < 5 rel_pitch = 0; end
             if nargin < 6 rel_yaw = 0; end
             if nargin < 7 phi_0 = 0; end
@@ -97,9 +100,9 @@ classdef Transducer
             phi = phi_0 + linspace(0,2*pi*(1-1/N),N)';%Skapa N vinklar
             rel_pos = radius*[cos(phi), -sin(phi), zeros(size(phi))];%Kordinater rel. cirkelskiva
             
-            %Rotera u,v,w -> x,y,z sÂ att z = normal
-            %Om normal . u liten lÂt y = normal x u och x = y x normal
-            %Om normal . u stor lÂt x = v x normal och y = normal x x
+            %Rotera u,v,w -> x,y,z s√• att z = normal
+            %Om normal . u liten l√•t y = normal x u och x = y x normal
+            %Om normal . u stor l√•t x = v x normal och y = normal x x
             skal = normal(1);%normal . u
             z = normal;%Alla kolonnvektorer
             if (skal < 0.5)
@@ -117,6 +120,10 @@ classdef Transducer
             for i = 1:N
                 Transducer.add_single(rel_pos(i,:),pi-rel_pitch+phi(i),rel_yaw,phase);
             end
+        end
+        function [transducer_handles] = list_transducers()
+            global transducer_list
+            transducer_handles = transducer_list;
         end
         function draw_all(fig_num)
             if nargin < 1
@@ -162,8 +169,8 @@ classdef Transducer
         end
         function draw_plane_at_x(x,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
             %DRAW_PLANE
-            assert(x >= Transducer.x_min, ['x mÂste vara >= ' num2str(Transducer.x_min)]);
-            assert(x <= Transducer.x_max, ['x mÂste vara <= ' num2str(Transducer.x_max)]);
+            assert(x >= Transducer.x_min, ['x m√•ste vara >= ' num2str(Transducer.x_min)]);
+            assert(x <= Transducer.x_max, ['x m√•ste vara <= ' num2str(Transducer.x_max)]);
             
             x_vekt = [x-0.002 x-0.001 x x+0.001 x+0.002];
             y_vekt = linspace(Transducer.y_min,Transducer.y_max,Transducer.plane_n);
@@ -176,8 +183,8 @@ classdef Transducer
         end
         function draw_plane_at_y(y,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
             %DRAW_PLANE
-            assert(y >= Transducer.y_min, ['y mÂste vara >= ' num2str(Transducer.y_min)]);
-            assert(y <= Transducer.y_max, ['y mÂste vara <= ' num2str(Transducer.y_max)]);
+            assert(y >= Transducer.y_min, ['y m√•ste vara >= ' num2str(Transducer.y_min)]);
+            assert(y <= Transducer.y_max, ['y m√•ste vara <= ' num2str(Transducer.y_max)]);
             
             x_vekt = linspace(Transducer.x_min,Transducer.x_max,Transducer.plane_n);
             y_vekt = [y-0.002 y-0.001 y y+0.001 y+0.002];
@@ -190,8 +197,8 @@ classdef Transducer
         end
         function draw_plane_at_z(z,fig_num_p,fig_num_g,fig_num_dg,fig_num_ddg)
             %DRAW_PLANE
-            assert(z >= Transducer.z_min, ['z mÂste vara >= ' num2str(Transducer.z_min)]);
-            assert(z <= Transducer.z_max, ['z mÂste vara <= ' num2str(Transducer.z_max)]);
+            assert(z >= Transducer.z_min, ['z m√•ste vara >= ' num2str(Transducer.z_min)]);
+            assert(z <= Transducer.z_max, ['z m√•ste vara <= ' num2str(Transducer.z_max)]);
             
             x_vekt = linspace(Transducer.x_min,Transducer.x_max,Transducer.plane_n);
             y_vekt = linspace(Transducer.y_min,Transducer.y_max,Transducer.plane_n);
@@ -209,7 +216,7 @@ classdef Transducer
             if ~exist('fig_num_ddg','var'), fig_num_ddg = 4; end
             
             [X,Y,Z] = meshgrid(x_vekt,y_vekt,z_vekt);
-            % Ber‰kna tryck
+            % Ber√§kna tryck
             [p_sum,px_sum,py_sum,pz_sum,near] = Transducer.total_tryck([X(:) Y(:) Z(:)]);
             p_sum = reshape(p_sum,size(X));
             px_sum = reshape(px_sum,size(X));
@@ -217,24 +224,24 @@ classdef Transducer
             pz_sum = reshape(pz_sum,size(X));
             near = reshape(near,size(X));
             
-            % Ber‰kna gorkov om den ska plottas eller anv‰ndas sen
+            % Ber√§kna gorkov om den ska plottas eller anv√§ndas sen
             if(~isempty([fig_num_g fig_num_dg fig_num_ddg]))
                 gor = gorkov(p_sum, px_sum, py_sum, pz_sum);
             end
             
-            % Ber‰kna gradient om den ska plottas eller anv‰ndas sen
+            % Ber√§kna gradient om den ska plottas eller anv√§ndas sen
             if(~isempty([fig_num_dg fig_num_ddg])) 
                 [u,v,w] = gradient(gor,x_vekt,y_vekt,z_vekt);
                 u = -u; v = -v; w = -w;
             end
             
-            % Ber‰kna laplace om den ska plottas eller anv‰ndas sen
+            % Ber√§kna laplace om den ska plottas eller anv√§ndas sen
             if(~isempty([fig_num_ddg])) 
                 lapl = divergence(X,Y,Z,u,v,w);
             end
             
             
-            %Plotta tryck om fig_num_p inte ‰r tom
+            %Plotta tryck om fig_num_p inte √§r tom
             if(~isempty(fig_num_p))
                 isolines = logspace(0,2.4,50);
                 isolines = exp(isolines);
@@ -244,7 +251,7 @@ classdef Transducer
                 colorbar, caxis([4 9e4]), axis tight
             end
 
-            %Plotta gorkov om fig_num_g inte ‰r tom
+            %Plotta gorkov om fig_num_g inte √§r tom
             if(~isempty(fig_num_p))
                 isolines = logspace(-8,-5,50);
                 % isolines = exp(isolines);
@@ -257,13 +264,13 @@ classdef Transducer
                 colormap(cmap);
             end
             
-            %Plotta gradient om fig_num_dg inte ‰r tom
+            %Plotta gradient om fig_num_dg inte √§r tom
             if(~isempty(fig_num_dg))
                 Transducer.figure(fig_num_dg,'$-\nabla$ Gorkovpotential [N]')
                 Transducer.quiver3(X,Y,Z,u,v,w);
             end
             
-            %Plotta laplacian om fig_num_ddg inte ‰r tom
+            %Plotta laplacian om fig_num_ddg inte √§r tom
             if(~isempty(fig_num_ddg))
                 isolines = logspace(-10,-3,50);
                 Transducer.figure(fig_num_ddg,'$-\nabla^2$ Gorkovpotential')
@@ -277,7 +284,7 @@ classdef Transducer
             end
         end
         function animate()
-            %ANIMATE testfunktion fˆr att se om pitch och yaw funkar
+            %ANIMATE testfunktion f√∂r att se om pitch och yaw funkar
            for pitch = -pi:pi/16:pi
                Transducer.draw([1e-2 1e-2 1e-2],pitch,pi/4)
                pause(0.1)
