@@ -1,5 +1,4 @@
 #include "command_lib.h"
-#include "definitions.h"
 
 #include <xc.h>
 #include <sys/attribs.h>
@@ -17,6 +16,8 @@
     The next character in the status message.
  * 
  */
+
+#ifndef MCU_SLAVE
 char get_status_char() {
     char ret = status.str[status.pos];
     status.pos++;
@@ -38,6 +39,7 @@ void set_status(char *new_status, ...) {
     }
     status.pos = 0;
 }
+#endif
 
 void restart_command_timeout(){
     TMR2 = 0;    // Clear counter
@@ -49,10 +51,10 @@ void clear_command_timeout(){
 }
 
 int set_single(char num, char val){
-    if (num >= sizeof(delay_array)) {
+    if (num >= sizeof(signal_array)) {
         return 1;
     }
-    delay_array[num] = val;
+    SET_SIGNAL(signal_array[num],val);
     return 0;
 }
 
@@ -72,6 +74,7 @@ void __ISR (_TIMER_3_VECTOR, IPL1SRS) Command_Timer_Interrupt(void)
 	IFS0bits.T3IF = 0;
 }
 
+#ifdef MCU_SLAVE
 void __ISR(_SPI1_VECTOR, ipl2) SPI_Interrupt(void) 
 { 
     if(SPI1STATbits.SPIROV){//Overflow has occurred
@@ -79,12 +82,76 @@ void __ISR(_SPI1_VECTOR, ipl2) SPI_Interrupt(void)
         //flashes++;
         //LATAbits.LATA2 = !PORTAbits.RA2;//Toggle RA2
     }
-    if(SPI1STATbits.SPITBE){
-        SPI1BUF = next_tx;
-        next_tx = get_status_char();
-    }
     if(SPI1STATbits.SPIRBF){//Recieve
         char rx = SPI1BUF;
+        if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
+        //flashes = command.next_idx;
+        command.comm[command.next_idx] = rx;
+        if (command.next_idx == 0) {
+            switch(rx) {
+                case 'a'://All
+                case 's'://Single
+                case 'p'://Period
+                    command.next_idx++;
+                    restart_command_timeout();
+                    break;
+            }
+        } else {
+            char cmd = command.comm[0];
+            if ((cmd == 'a') && (command.next_idx == sizeof(signal_array))) {
+                int i, failed = 0;
+                for (i = 1;i <= sizeof(signal_array); i++){
+                    failed += set_single(i-1,command.comm[i]);                
+                }
+                //if (failed){}
+                //UPDATE_LATVECT_SET;
+                command.next_idx = 0;
+                clear_command_timeout();            
+            } else if ((cmd == 's') && (command.next_idx == 2)) {
+                //Single - comm[1] is transducer no., comm[2] is value of delay
+                set_single(command.comm[1],command.comm[2]);
+                //set_status("%c: Failed. %u OOB",cmd,command.comm[1]);
+                //UPDATE_LATVECT_SET;
+                command.next_idx = 0;
+                clear_command_timeout();
+            } else if ((cmd == 'p') && (command.next_idx == 1)) {
+                set_period(command.comm[1]);
+                //set_status("%c: Success. Set period to %u",cmd,command.comm[1]);
+                command.next_idx = 0;
+                clear_command_timeout();
+            } else {
+                command.next_idx++;
+                restart_command_timeout();
+            }
+        }/**/
+    }
+    IFS1CLR = 0x70;
+ }
+#else
+void __ISR(_UART1_VECTOR, ipl2) UART_Interrupt(void) 
+{ 
+    if(U1STAbits.OERR){//Overflow has occurred
+        //SET_PIN_A(1,1);
+        //SPI1STATbits.SPIROV = 0;
+        //flashes++;
+        //LATAbits.LATA2 = !PORTAbits.RA2;//Toggle RA2
+    }
+    if(U1STAbits.PERR){//Overflow has occurred
+        SET_PIN_A(1,1);
+    }
+    if(U1STAbits.FERR){//Overflow has occurred
+        SET_PIN_A(1,1);
+    }
+    if(U1STAbits.TRMT){
+        //SPI1BUF = next_tx;
+        //next_tx = get_status_char();
+        //U1TXREG = 'k';
+    }
+    if(U1STAbits.URXDA){//Recieve
+        TOGGLE_PIN_A(1);
+        char rx = U1RXREG;
+        signal_array[2] = rx;
+        /*char rx = SPI1BUF;
         if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
         //flashes = command.next_idx;
         command.comm[command.next_idx] = rx;
@@ -136,11 +203,11 @@ void __ISR(_SPI1_VECTOR, ipl2) SPI_Interrupt(void)
                 command.next_idx++;
                 restart_command_timeout();
             }
-        }/**/
+        }*/
     }
-    IFS1CLR = 0x70;
+    IFS1CLR = 0x0380;
  }
-
+#endif
 /** 
   @Function
     char get_status_char() 
