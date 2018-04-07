@@ -11,19 +11,25 @@ struct Command {
 static volatile struct Command command = {0};
 
 #ifndef MCU_SLAVE
-struct Status {
+struct Tx_buffer {
     char str[50];
-    int pos;
+    signed int pos;//-1 if not transmitting
 };
 
-static volatile char next_tx = 0;
-static volatile struct Status status = {0};
+#define TRANSMITTING (tx_buffer.pos > -1)
 
-char get_status_char();
-void set_status(char *new_status, ...);
+static volatile struct Tx_buffer tx_buffer = {.pos = -1};
+
+char next_tx_char();
+int transmit(char *new_status, ...);
 #endif
 void restart_command_timeout();
 void clear_command_timeout();
 int set_single(char num, char val);
+
+int command_set_all();
+int command_set_single();
+int command_set_period();
+int command_set_delay();
 
 #endif
