@@ -34,6 +34,7 @@
 #include <xc.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 volatile struct signal signal_array[N_SIGNALS] = {0};
 volatile int update = 0;
@@ -49,16 +50,37 @@ void initMasterSPI();
 #endif
 #endif
 
-/*
-    B8_up = signal_array[0];
-    B8_down = B8_up + signal_array[1];
-    B9_up = signal_array[2];
-    B9_down = B9_up + signal_array[3];
+#ifndef MCU_MASTER
+#ifdef MCU_PROTOTYP
+void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect);
+#else
+void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect);
+#endif
+#endif
 
-    B4 = B8;
-    A4 = B9;
-*/
-
+//Setup outputs
+#ifndef MCU_MASTER
+static const struct pin_struct outputs[N_SIGNALS] = {
+#ifdef MCU_PROTOTYP
+    PIN_B_STRUCT(8), PIN_B_STRUCT(9),
+    PIN_B_STRUCT(4), PIN_A_STRUCT(4)
+#else
+    PIN_A_STRUCT(4), PIN_A_STRUCT(0), //1 2
+    PIN_A_STRUCT(9), PIN_A_STRUCT(1),
+    PIN_C_STRUCT(3), PIN_B_STRUCT(0),
+    PIN_C_STRUCT(4), PIN_B_STRUCT(1),
+    PIN_C_STRUCT(5), PIN_B_STRUCT(2),
+    PIN_B_STRUCT(5), PIN_B_STRUCT(3),//11 12
+    PIN_B_STRUCT(6), PIN_C_STRUCT(9),
+    PIN_B_STRUCT(7), PIN_C_STRUCT(1),
+    PIN_B_STRUCT(8), PIN_C_STRUCT(2),
+    PIN_B_STRUCT(9), PIN_A_STRUCT(2),
+    PIN_C_STRUCT(6), PIN_A_STRUCT(3),//21 22
+    PIN_C_STRUCT(7), PIN_A_STRUCT(8),
+    PIN_C_STRUCT(8), PIN_B_STRUCT(4)
+#endif
+    };
+#endif
 int main(int argc, char** argv) {
     //Initialization
     InitializeSystem();
@@ -71,28 +93,6 @@ int main(int argc, char** argv) {
 #endif
 #endif
     
-    //Setup outputs
-#ifndef MCU_MASTER
-    static const struct pin_struct outputs[N_SIGNALS] = {
-#ifdef MCU_PROTOTYP
-        PIN_B_STRUCT(8), PIN_B_STRUCT(9),
-        PIN_B_STRUCT(4), PIN_A_STRUCT(4)
-#else
-        PIN_A_STRUCT(4), PIN_A_STRUCT(0), //1 2
-        PIN_A_STRUCT(9), PIN_A_STRUCT(1),
-        PIN_C_STRUCT(3), PIN_B_STRUCT(0),
-        PIN_C_STRUCT(4), PIN_B_STRUCT(1),
-        PIN_C_STRUCT(5), PIN_B_STRUCT(2),
-        PIN_B_STRUCT(5), PIN_B_STRUCT(3),//11 12
-        PIN_B_STRUCT(6), PIN_C_STRUCT(9),
-        PIN_B_STRUCT(7), PIN_C_STRUCT(1),
-        PIN_B_STRUCT(8), PIN_C_STRUCT(2),
-        PIN_B_STRUCT(9), PIN_A_STRUCT(2),
-        PIN_C_STRUCT(6), PIN_A_STRUCT(3),//21 22
-        PIN_C_STRUCT(7), PIN_A_STRUCT(8),
-        PIN_C_STRUCT(8), PIN_B_STRUCT(4)
-#endif
-    };
     int i;
     for (i = 0;i < N_SIGNALS; i++){
         PIN_CONF_OUTPUT(outputs[i]);
@@ -106,28 +106,66 @@ int main(int argc, char** argv) {
     SET_SIGNAL(signal_array[1],124);
     SET_SIGNAL(signal_array[2],0);
     SET_SIGNAL(signal_array[3],124);
-    transmit("Hello World");
-    //SPI1BUF = get_status_char();
+    transmit("Hello World\n");
 #endif
+    
+#ifdef MCU_SLAVE
+    uint32_t LATA_vect[256] = {}, LATB_vect[256] = {},LATC_vect[256] = {};
+    gen_LAT_vects(LATA_vect, LATB_vect,LATC_vect);
+#else
+    uint32_t LATA_vect[256] = {}, LATB_vect[256] = {};
+    gen_LAT_vects(LATA_vect, LATB_vect);
 #endif
     
     //Run
     while(1) {
 #ifndef MCU_MASTER
-        //Cirka 2-3 varv per timer steg
-#ifdef DEBUG
-        if (SIGNAL_UP(TMR4/300,signal_array[i].up,signal_array[i].down)) PIN_SET(outputs[i]);
+        //7 timer steg per varv
+#ifdef MCU_SLAVE
+        if (UPDATE_LATVECT) gen_LAT_vects(LATA_vect, LATB_vect, LATC_vect);
+        LATA = LATA_vect[TMR4];
+        LATB = LATB_vect[TMR4];
+        LATC = LATC_vect[TMR4];
 #else
-        if (SIGNAL_UP(TMR4,signal_array[i].up,signal_array[i].down)) PIN_SET(outputs[i]);
+        if (UPDATE_LATVECT) gen_LAT_vects(LATA_vect, LATB_vect);
+        LATA = LATA_vect[TMR4];
+        LATB = LATB_vect[TMR4];
 #endif
-        else PIN_CLR(outputs[i]);
-        i++;
-        if (i >= N_SIGNALS) i = 0;
 #endif        
     }
     
     return (EXIT_SUCCESS);
 }
+
+#ifndef MCU_MASTER
+//Tar 5000 timer varv med period 249 och 4 signaler
+//I oscilloskop: ca 500us
+void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect
+#ifdef MCU_SLAVE
+        , uint32_t *LATC_vect
+#endif
+        ){
+    memset(LATA_vect,0,sizeof(uint32_t)*256);
+    memset(LATB_vect,0,sizeof(uint32_t)*256);
+    #ifdef MCU_SLAVE
+    memset(LATC_vect,0,sizeof(uint32_t)*256);
+    #endif
+    int s;
+    for(s = 0;s < N_SIGNALS;s++){
+        unsigned char t = signal_array[s].up;
+        while (t != signal_array[s].down){
+            LATA_vect[t] |= outputs[s].A_mask;
+            LATB_vect[t] |= outputs[s].B_mask;
+#ifdef MCU_SLAVE
+            LATC_vect[t] |= outputs[s].C_mask;
+#endif
+            t++;
+            if (t >= period) t = 0;
+        }
+    }
+    UPDATE_LATVECT_CLR;
+}
+#endif
 
 #ifndef MCU_SLAVE
 void initUART() {
@@ -264,6 +302,7 @@ void InitializeSystem(void)
     // Set T2 period ~ 5s
     uint32_t one_second = 78125;
     PR2 = one_second*5;
+    //PR4 = 0xffff;
     PR4 = period;
     
 #ifdef DEBUG

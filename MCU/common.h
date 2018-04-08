@@ -42,19 +42,27 @@ static volatile unsigned int flashes = 0;
 #define SET_PIN_B(i,x) LATBSET = ((x)?(1<<i):0)
 
 struct pin_struct {
-    volatile uint32_t *tris_clr;
-    volatile uint32_t *set;
-    volatile uint32_t *clr;
-    uint32_t mask;
+    uint32_t A_mask;
+    uint32_t B_mask;
+#ifdef MCU_MASTER
+    uint32_t C_mask;
+#endif
 };
 
-#define PIN_CONF_OUTPUT(pin) *pin.tris_clr = pin.mask
-#define PIN_SET(pin) *pin.set = pin.mask
-#define PIN_CLR(pin) *pin.clr = pin.mask
-
-#define PIN_A_STRUCT(i) (struct pin_struct) { .tris_clr = &TRISACLR, .set = &LATASET, .clr = &LATACLR, .mask = 1<<i}
-#define PIN_B_STRUCT(i) (struct pin_struct) { .tris_clr = &TRISBCLR, .set = &LATBSET, .clr = &LATBCLR, .mask = 1<<i}
-#define PIN_C_STRUCT(i) (struct pin_struct) { .tris_clr = &TRISCCLR, .set = &LATCSET, .clr = &LATCCLR, .mask = 1<<i}
+#ifndef MCU_MASTER
+#define PIN_CONF_OUTPUT(pin) TRISACLR = pin.A_mask; TRISBCLR = pin.B_mask
+#define PIN_SET(pin) LATASET = pin.A_mask; LATBSET = pin.B_mask
+#define PIN_CLR(pin) LATACLR = pin.A_mask; LATBCLR = pin.B_mask
+#else
+#define PIN_CONF_OUTPUT(pin) TRISACLR = pin.A_mask; TRISBCLR = pin.B_mask; TRISCCLR = pin.C_mask
+#define PIN_SET(pin) LATASET = pin.A_mask; LATBSET = pin.B_mask; LATCSET = pin.C_mask
+#define PIN_CLR(pin) LATACLR = pin.A_mask; LATBCLR = pin.B_mask LATCCLR = pin.C_mask
+#endif
+#define PIN_A_STRUCT(i) (struct pin_struct) { .A_mask = 1<<i}
+#define PIN_B_STRUCT(i) (struct pin_struct) { .B_mask = 1<<i}
+#ifdef MCU_SLAVE
+#define PIN_C_STRUCT(i) (struct pin_struct) { .C_mask = 1<<i}
+#endif
 
 //#define UPDATE_PERIOD (update & 0x1)
 #define UPDATE_LATVECT (update & 0x2)

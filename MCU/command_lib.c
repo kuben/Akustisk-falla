@@ -151,7 +151,7 @@ void __ISR(_UART1_VECTOR, ipl2) UART_Interrupt(void)
                 case 0://Read status message
                     break;
                 default:
-                    transmit("%c not a command",rx);
+                    transmit("%c not a command\n",rx);
             }
         } else {
             if (command_set_all()
@@ -163,6 +163,8 @@ void __ISR(_UART1_VECTOR, ipl2) UART_Interrupt(void)
             } else {
                 command.next_idx = 0;
                 clear_command_timeout();
+                //TOGGLE_PIN_A(1); För att mäta dödtid efter command
+                UPDATE_LATVECT_SET;
             }
         }
     }
@@ -178,14 +180,16 @@ void __ISR(_UART1_VECTOR, ipl2) UART_Interrupt(void)
     1 unless command was 'set all' and finished
  * 
  */
+
+#ifndef MCU_SLAVE
 int command_set_all() {
     if((command.comm[0] != 'a') || (command.next_idx =! N_SIGNALS)) return 1;
     int i, failed = 0;
     for (i = 1;i <= N_SIGNALS; i++){
         failed += set_single(i-1,command.comm[i]);                
     }
-    if (failed) transmit("%c: Failed %d times",command.comm[0], failed);
-    else transmit("%c: Success.",command.comm[0]);
+    if (failed) transmit("%c: Failed %d times\n",command.comm[0], failed);
+    else transmit("%c: Success.\n",command.comm[0]);
     return 0;
 }
 
@@ -193,28 +197,30 @@ int command_set_single() {
     if ((command.comm[0] != 's') || (command.next_idx != 2)) return 1;
     //Single - comm[1] is transducer no., comm[2] is value of delay
     if (set_single(command.comm[1],command.comm[2]))
-        transmit("%c: Failed. %u OOB",command.comm[0],command.comm[1]);
+        transmit("%c: Failed. %u OOB\n",command.comm[0],command.comm[1]);
     else
-        transmit("%c: Success. Set %d to %u",command.comm[0],command.comm[1],command.comm[2]);
+        transmit("%c: Success. Set %d to %u\n",command.comm[0],command.comm[1],command.comm[2]);
     return 0;
 }
 
 int command_set_period() {
     if ((command.comm[0] != 'p') || (command.next_idx != 1)) return 1;
     set_period(command.comm[1]);
-    transmit("%c: Success. Set period to %u",command.comm[0],command.comm[1]);
+    transmit("%c: Success. Set period to %u\n",command.comm[0],command.comm[1]);
     return 0;
 }
+
 int command_set_delay() {
     if ((command.comm[0] != 'd') || (command.next_idx != 5)) return 1;
-    SET_SIGNAL_DUR(signal_array[0],command.comm[0],command.comm[1]);
-    SET_SIGNAL_DUR(signal_array[2],command.comm[0],command.comm[1]);
-    SET_SIGNAL_DUR(signal_array[1],command.comm[2],command.comm[3]);
-    SET_SIGNAL_DUR(signal_array[3],command.comm[2],command.comm[3]);
-    transmit("%c: Success. Up: %u Down: %u, Up: %u Down: %u",
+    SET_SIGNAL_DUR(signal_array[0],command.comm[1],command.comm[2]);
+    SET_SIGNAL_DUR(signal_array[2],command.comm[1],command.comm[2]);
+    SET_SIGNAL_DUR(signal_array[1],command.comm[3],command.comm[4]);
+    SET_SIGNAL_DUR(signal_array[3],command.comm[3],command.comm[4]);
+    transmit("%c: Success. Up: %u Dur: %u, Up: %u Dur: %u\n",
             command.comm[0],command.comm[1],command.comm[2],command.comm[3],command.comm[4]);
     return 0;
 }
+#endif
 /** 
   @Function
     char get_status_char() 
