@@ -36,9 +36,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef MCU_MASTER
 volatile struct signal signal_array[N_SIGNALS] = {0};
 volatile int update = 0;
 volatile unsigned char period = 249;
+#endif
 
 void InitializeSystem(void);
 #ifdef MCU_SLAVE
@@ -56,10 +58,8 @@ void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect);
 #else
 void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect);
 #endif
-#endif
 
 //Setup outputs
-#ifndef MCU_MASTER
 static const struct pin_struct outputs[N_SIGNALS] = {
 #ifdef MCU_PROTOTYP
     PIN_B_STRUCT(8), PIN_B_STRUCT(9),
@@ -88,77 +88,101 @@ int main(int argc, char** argv) {
     initSlaveSPI();
 #else
     initUART();
+    transmit("Hello World");
 #ifdef MCU_MASTER
     initMasterSPI();
 #endif
 #endif
     
+#ifdef MCU_MASTER
+    TRISAbits.TRISA1 = 0;
+    TRISBbits.TRISB4 = 0;
+    TRISAbits.TRISA4 = 0;
+    SET_PIN_A(1,0);
+    SET_PIN_A(4,0);
+    SET_PIN_B(4,0);
+    
+    volatile int i = 0;
+#endif
+#ifdef MCU_SLAVE
     int i;
     for (i = 0;i < N_SIGNALS; i++){
         PIN_CONF_OUTPUT(outputs[i]);
+        SET_SIGNAL(signal_array[i],0);
     }
-    SET_SIGNAL(signal_array[0],50);
     SET_SIGNAL(signal_array[1],125);
     i = 0;
-#ifdef MCU_PROTOTYP
-    TRISAbits.TRISA1 = 0;
-    SET_SIGNAL(signal_array[0],0);
-    SET_SIGNAL(signal_array[1],124);
-    SET_SIGNAL(signal_array[2],0);
-    SET_SIGNAL(signal_array[3],124);
-    transmit("Hello World\n");
-#endif
-    
-#ifdef MCU_SLAVE
     uint32_t LATA_vect[256] = {}, LATB_vect[256] = {},LATC_vect[256] = {};
     gen_LAT_vects(LATA_vect, LATB_vect,LATC_vect);
-#else
+#endif
+#ifdef MCU_PROTOTYP
+    SET_SIGNAL_DUR(signal_array[0],0,124);
+    SET_SIGNAL_DUR(signal_array[1],124,124);
+    SET_SIGNAL_DUR(signal_array[2],0,124);
+    SET_SIGNAL_DUR(signal_array[3],124,124);
+    
     uint32_t LATA_vect[256] = {}, LATB_vect[256] = {};
     gen_LAT_vects(LATA_vect, LATB_vect);
 #endif
-    
+   
     //Run
     while(1) {
-#ifndef MCU_MASTER
-        //7 timer steg per varv
 #ifdef MCU_SLAVE
         if (UPDATE_LATVECT) gen_LAT_vects(LATA_vect, LATB_vect, LATC_vect);
         LATA = LATA_vect[TMR4];
         LATB = LATB_vect[TMR4];
         LATC = LATC_vect[TMR4];
-#else
+#endif
+#ifdef MCU_PROTOTYP
+        //7 timer steg per varv
         if (UPDATE_LATVECT) gen_LAT_vects(LATA_vect, LATB_vect);
         LATA = LATA_vect[TMR4];
         LATB = LATB_vect[TMR4];
 #endif
-#endif        
+#ifdef MCU_MASTER
+        i++;
+        if(i == 1000000){
+            i = 0;
+            TOGGLE_PIN_A(1);
+        }
+#endif
     }
     
     return (EXIT_SUCCESS);
 }
 
-#ifndef MCU_MASTER
+#ifdef MCU_PROTOTYP
 //Tar 5000 timer varv med period 249 och 4 signaler
 //I oscilloskop: ca 500us
-void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect
-#ifdef MCU_SLAVE
-        , uint32_t *LATC_vect
-#endif
-        ){
+void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect){
     memset(LATA_vect,0,sizeof(uint32_t)*256);
     memset(LATB_vect,0,sizeof(uint32_t)*256);
-    #ifdef MCU_SLAVE
-    memset(LATC_vect,0,sizeof(uint32_t)*256);
-    #endif
     int s;
     for(s = 0;s < N_SIGNALS;s++){
         unsigned char t = signal_array[s].up;
         while (t != signal_array[s].down){
             LATA_vect[t] |= outputs[s].A_mask;
             LATB_vect[t] |= outputs[s].B_mask;
-#ifdef MCU_SLAVE
-            LATC_vect[t] |= outputs[s].C_mask;
+            t++;
+            if (t >= period) t = 0;
+        }
+    }
+    UPDATE_LATVECT_CLR;
+}
 #endif
+#ifdef MCU_SLAVE
+void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect){
+    memset(LATA_vect,0,sizeof(uint32_t)*256);
+    memset(LATB_vect,0,sizeof(uint32_t)*256);
+    memset(LATC_vect,0,sizeof(uint32_t)*256);
+    int s;
+    for(s = 0;s < N_SIGNALS;s++){
+        unsigned char t = signal_array[s].up;
+        int i;
+        for (i = 0;i < (period+1)/2;i++){
+            LATA_vect[t] |= outputs[s].A_mask;
+            LATB_vect[t] |= outputs[s].B_mask;
+            LATC_vect[t] |= outputs[s].C_mask;
             t++;
             if (t >= period) t = 0;
         }
@@ -235,25 +259,21 @@ void initMasterSPI(){
     IFS1CLR = 0x0070;   //Clear flags (RX,TX,E)
     IPC7bits.SPI1IP = 0b010; //Set priority 2
     IPC7bits.SPI1IS = 0;
-    IEC1SET = 0x0050; //Enable TX and Error interrupt
+    //IEC1SET = 0x0050; //Enable TX and Error interrupt
     SPI1STATbits.SPIROV = 0;    // Clear overflow flag
     
-    SPI1BRG = 3; 
-     
     /* SPI1CON settings */
     SPI1CONbits.CKE = 1;        // Output data changes on transition from idle to active
-    SPI1CONbits.MSTEN = 0;       // In master mode
-    //SPI1CONbits.SRXISEL = 0b01;
+    SPI1CONbits.MSTEN = 1;       // In master mode
+    SPI1BRG = 100;                //PB-clock 20MHz, divide by 100 
     
-    //RPB6Rbits.RPB6R = 0b0011;//RPB6 (pin 15) SPI MISO. Also PGEC3
-    //TRISBbits.TRISB6 = 0;//An output
-    //SDI1Rbits.SDI1R = 0b0001;//RPB5 (pin 14) SPI MOSI. Also PGED3
-    //SS1R   = 0x00000004;//RPB7 (pin 16) SPI SS
-    //TRISBbits.TRISB5 = 1;
-    //TRISBbits.TRISB7 = 1;
-    //TRISBbits.TRISB14 = 1;
     //SCK1 (pin 25) SPI CLK
+    RPB6Rbits.RPB6R = 0b0011;//RPB6 (pin 15) SPI MISO. Also PGEC3
+    SDI1Rbits.SDI1R = 0b0001;//RPB5 (pin 14) SPI MOSI. Also PGED3
+    TRISBbits.TRISB6 = 0;//An input
+    TRISBCLR = 0x0f90;//5 and 7-11 outputs
     
+    UNSEL_ALL_SLAVES;
     SPI1CONbits.ON = 1;         // Turn module on
 }
 #endif
@@ -287,40 +307,47 @@ void InitializeSystem(void)
     // Turn off the timer
     T2CONbits.TON = 0;
     T3CONbits.TON = 0;
-    T4CONbits.TON = 0;
-    // Pre-Scale timer 2 = 1:256 (T2Clk: 20MHz / 256 = 78.125kHz)
-    T2CONbits.TCKPS = 7;
+    T2CONbits.TCKPS = 7;// Pre-Scale timer 2 = 1:256 (T2Clk: 20MHz / 256 = 78.125kHz)
     T2CONbits.T32 = 1;
-    // Pre-Scale timer 4 = 1:2 (250 equiv. to 40kHz period)
-    T4CONbits.TCKPS = 1;
-    
-    
+       
     TMR2 = 0;
     TMR3 = 0;
-    TMR4 = 0;
     
     // Set T2 period ~ 5s
     uint32_t one_second = 78125;
-    PR2 = one_second*5;
-    //PR4 = 0xffff;
-    PR4 = period;
-    
-#ifdef DEBUG
-    T4CONbits.TCKPS = 0x7;//For debug 1:256
-    PR4 = 0xffff;
-#endif
+    PR2 = one_second/2;
 
     /* Initialize Timer 2 Interrupt Controller Settings */
     
     IPC3bits.T3IP = 1;// Set the interrupt priority to 1
     IFS0bits.T3IF = 0;// Reset the Timer 2 interrupt flag
     IEC0bits.T3IE = 1;// Enable interrupts from Timer 2
+    
+#ifndef MCU_MASTER
+    T4CONbits.TON = 0;
+    T4CONbits.TCKPS = 1;// Pre-Scale timer 4 = 1:2 (250 equiv. to 40kHz period)
+    TMR4 = 0;
+    //PR4 = 0xffff;
+    PR4 = period;
+#ifdef DEBUG
+    T4CONbits.TCKPS = 0x7;//For debug 1:256
+    PR4 = 0xffff;
+#endif
+    T4CONbits.TON = 1;
+#else
+    T4CONbits.TON = 0;
+    T4CONbits.TCKPS = 1;// Pre-Scale timer 4 = 1:2 (10MHz)
+    TMR4 = 0;//10kHz interrupt
+    PR4 = 1000;
+    IPC4bits.T4IP = 1;// Set the interrupt priority to 1
+    IFS0bits.T4IF = 0;// Reset the Timer 2 interrupt flag
+    IEC0bits.T4IE = 1;// Enable interrupts from Timer 2
+#endif
+    
     /* Set Interrupt Controller for multi-vector mode */
     INTCONSET = _INTCON_MVEC_MASK;
 
     /* Enable Interrupt Exceptions */
     // set the CP0 status IE bit high to turn on interrupts globally
     __builtin_enable_interrupts();
-    
-    T4CONbits.TON = 1;
 }

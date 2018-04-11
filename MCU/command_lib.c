@@ -11,6 +11,7 @@ char next_tx_char() {
     tx_buffer.pos++;
     if ((ret == 0) || (tx_buffer.pos >= sizeof(tx_buffer.str))){//EOL char or end of string reached
         tx_buffer.pos = -1;//Transmission ended
+        tx_buffer.str[0] = 0;//Clear old transmission
         IEC1bits.U1TXIE = 0;
     }
     return ret;
@@ -29,6 +30,77 @@ int transmit(char *new_status, ...) {
     }
     tx_buffer.pos = 0;
     IEC1bits.U1TXIE = 1;
+    return 0;
+}
+#endif
+
+#ifdef MCU_MASTER
+int shift_queue(){
+    int i;
+    for(i = 1;i < sizeof(spi_queue)/sizeof(struct SPI_transmission);i++){
+        if(spi_queue[i].slave_id == -1){//Empty, stop shifting
+            spi_queue[i-1].slave_id = -1;
+            break;
+        }
+        spi_queue[i-1].slave_id = spi_queue[i].slave_id;
+        spi_queue[i-1].pos = 0;
+        int j;
+        for(j = 0;j < sizeof(((struct SPI_transmission *)0)->str);j++){
+            spi_queue[i-1].str[j] = spi_queue[i].str[j];
+            //if(!spi_queue[i].str[j]) break;//Reached 0, no need to copy further
+        }
+    }
+    if(i == 1) return 1;//Queue is now empty
+    return 0;
+}
+
+int end_of_SPI_command(){//If current char is last one
+    if((spi_queue[0].str[0] == 'a') && (spi_queue[0].pos > 27)) return 1;
+    if((spi_queue[0].str[0] == 's') && (spi_queue[0].pos > 2)) return 1;
+    return 0;
+}
+
+char next_SPI_tx_char(){
+    if(!spi_queue[0].pos) SEL_SLAVE(spi_queue[0].slave_id);//First char
+    char ret = spi_queue[0].str[spi_queue[0].pos];
+    spi_queue[0].pos++;
+    if(end_of_SPI_command()){
+        shift_queue();//Shift everything forward in queue
+        IEC1bits.SPI1TXIE = 0;//Disable interrupts
+        T4CONbits.TON = 1;//Wait for SPIBUSY before deselecting slave
+    }
+    return ret;
+}
+
+int queue_SPI_tx(int slave_id, char *str, ...){
+    //Find first empty space in queue
+    int q;
+    for(q = 0;q < sizeof(spi_queue)/sizeof(struct SPI_transmission);q++){
+        if(spi_queue[q].slave_id == -1) break;
+    }
+    if(q == sizeof(spi_queue)/sizeof(struct SPI_transmission))
+        return 1;//Queue full
+    
+    //Queue transmission
+    static const size_t length = sizeof(((struct SPI_transmission *)0)->str);
+    char temp[length];
+    va_list vlist;
+    va_start(vlist, str);
+    vsnprintf(temp, length, str, vlist);
+    int i;
+    for (i = 0; i < length;i++) {
+        spi_queue[q].str[i] = temp[i];
+    }
+    spi_queue[q].slave_id = slave_id;
+    spi_queue[q].pos = 0;
+    
+    //If room in queue, set next id -1
+    if(q+1 < sizeof(spi_queue)/sizeof(struct SPI_transmission)){
+        spi_queue[q+1].slave_id = -1;
+    }
+    //transmit("Queued SPI Transmission in place %i",q);
+    IEC1bits.SPI1TXIE = 1;
+    return 0;
 }
 #endif
 
@@ -41,6 +113,16 @@ void clear_command_timeout(){
     T2CONbits.TON = 0;
 }
 
+#ifdef MCU_PROTOTYP
+int set_single(char num, char val){
+    if (num >= N_SIGNALS) {
+        return 1;
+    }
+    SET_SIGNAL_DUR(signal_array[num],val,124);
+    return 0;
+}
+#endif
+#ifdef MCU_SLAVE
 int set_single(char num, char val){
     if (num >= N_SIGNALS) {
         return 1;
@@ -48,17 +130,32 @@ int set_single(char num, char val){
     SET_SIGNAL(signal_array[num],val);
     return 0;
 }
-
+#endif
+#ifdef MCU_PROTOTYP
 void set_period(char period){
     T4CONbits.TON = 0;
     TMR4 = 0;
     PR4 = period;
     T4CONbits.TON = 1;   
 }
-void __ISR (_TIMER_3_VECTOR, IPL1SRS) Command_Timer_Interrupt(void)
+#endif
+
+#ifdef MCU_MASTER
+void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
+{
+    if(SPI1STATbits.SPIBUSY){
+        UNSEL_ALL_SLAVES;
+        T4CONbits.TON = 0;
+    }
+    IFS0bits.T4IF = 0;
+}
+
+#endif
+
+void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
 {
     //Command has timed out
-	//LATAbits.LATA1 = !PORTAbits.RA1;//Toggle RA1
+    transmit("Command %c timed out, args received: %i",command.comm[0],command.next_idx -1);
     command.next_idx = 0;
     clear_command_timeout();
 	// Reset interrupt flag
@@ -66,14 +163,13 @@ void __ISR (_TIMER_3_VECTOR, IPL1SRS) Command_Timer_Interrupt(void)
 }
 
 #ifndef MCU_PROTOTYP
-void __ISR(_SPI1_VECTOR, ipl2) SPI_Interrupt(void) 
-{ 
+void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void) 
+{
+#ifdef MCU_SLAVE
     if(SPI1STATbits.SPIROV){//Overflow has occurred
         SPI1STATbits.SPIROV = 0;
-        //flashes++;
-        //LATAbits.LATA2 = !PORTAbits.RA2;//Toggle RA2
+        //TOGGLE_PIN_A(4);
     }
-#ifdef MCU_SLAVE
     if(SPI1STATbits.SPIRBF){//Recieve
         char rx = SPI1BUF;
         if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
@@ -95,10 +191,12 @@ void __ISR(_SPI1_VECTOR, ipl2) SPI_Interrupt(void)
                 }
                 command.next_idx = 0;
                 clear_command_timeout();        
+                UPDATE_LATVECT_SET;
             } else if ((command.comm[0] == 'a') && (command.next_idx == N_SIGNALS)) {
                 set_single(command.comm[1],command.comm[2]);
                 command.next_idx = 0;
                 clear_command_timeout();  
+                UPDATE_LATVECT_SET;
             } else {
                 command.next_idx++;
                 restart_command_timeout();
@@ -106,15 +204,19 @@ void __ISR(_SPI1_VECTOR, ipl2) SPI_Interrupt(void)
         }
     }
 #else
-    if(SPI1STATbits.SPIRBF){//Transmit
-        SPI1BUF = next_tx_char();
+    if(SPI1STATbits.SPITBE){
+        if((spi_queue[0].slave_id == -1) || (spi_queue[0].pos == -1)){//Transmission done
+            TOGGLE_PIN_A(4);
+        } else {
+            SPI1BUF = next_SPI_tx_char();
+        }
     }
 #endif
     IFS1CLR = 0x70;
  }
 #endif
 #ifndef MCU_SLAVE
-void __ISR(_UART1_VECTOR, ipl2) UART_Interrupt(void) 
+void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void) 
 { 
     if(U1STAbits.OERR){//Overflow has occurred
         //SET_PIN_A(1,1);
@@ -132,7 +234,7 @@ void __ISR(_UART1_VECTOR, ipl2) UART_Interrupt(void)
         U1TXREG = next_tx_char();
     }
     if(U1STAbits.URXDA){//Recieve
-        TOGGLE_PIN_A(1);
+        //TOGGLE_PIN_A(1);
         char rx = U1RXREG;
         //SET_SIGNAL_DUR(signal_array[2],rx,124);
         if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
@@ -142,29 +244,33 @@ void __ISR(_UART1_VECTOR, ipl2) UART_Interrupt(void)
             switch(rx) {
                 case 'a'://All
                 case 's'://Single
+#ifdef MCU_PROTOTYP
                 case 'p'://Period
                 case 'd':
+#endif
                     command.next_idx++;
                     restart_command_timeout();
                     break;
-                case 'r':
-                case 0://Read status message
-                    break;
                 default:
-                    transmit("%c not a command\n",rx);
+                    transmit("%c not a command",rx);
             }
         } else {
             if (command_set_all()
                     && command_set_single()
+#ifdef MCU_PROTOTYP
                     && command_set_period()
-                    && command_set_delay()) {//None of the commands
+                    && command_set_delay()
+#endif
+                    ){//None of the commands
                 command.next_idx++;
                 restart_command_timeout();            
             } else {
                 command.next_idx = 0;
                 clear_command_timeout();
                 //TOGGLE_PIN_A(1); För att mäta dödtid efter command
+#ifdef MCU_PROTOTYP
                 UPDATE_LATVECT_SET;
+#endif
             }
         }
     }
@@ -183,30 +289,57 @@ void __ISR(_UART1_VECTOR, ipl2) UART_Interrupt(void)
 
 #ifndef MCU_SLAVE
 int command_set_all() {
+#ifdef MCU_PROTOTYP
     if((command.comm[0] != 'a') || (command.next_idx =! N_SIGNALS)) return 1;
     int i, failed = 0;
     for (i = 1;i <= N_SIGNALS; i++){
         failed += set_single(i-1,command.comm[i]);                
     }
-    if (failed) transmit("%c: Failed %d times\n",command.comm[0], failed);
-    else transmit("%c: Success.\n",command.comm[0]);
+    if (failed) transmit("%c: Failed %d times",command.comm[0], failed);
+    else transmit("%c: Success.",command.comm[0]);
+#else
+    if((command.comm[0] != 'a') || (command.next_idx != 130)) return 1;
+    int i,id = 0;
+    for(i = 1;i < 130; i += 26){
+        if(queue_SPI_tx(id, "a%.*s", 26, command.comm + i)){//Failed
+            transmit("%c: Failed on id %i, queue full.", command.comm[0], id);
+            break;
+        }
+        id++;
+    }
+    if (id == 5) transmit("%c: Sent phases to id 0 to 4",command.comm[0]);
     return 0;
+#endif
 }
 
 int command_set_single() {
+#ifdef MCU_PROTOTYP
     if ((command.comm[0] != 's') || (command.next_idx != 2)) return 1;
     //Single - comm[1] is transducer no., comm[2] is value of delay
     if (set_single(command.comm[1],command.comm[2]))
-        transmit("%c: Failed. %u OOB\n",command.comm[0],command.comm[1]);
+        transmit("%c: Failed. %u OOB",command.comm[0],command.comm[1]);
     else
-        transmit("%c: Success. Set %d to %u\n",command.comm[0],command.comm[1],command.comm[2]);
+        transmit("%c: Success. Set %d to %u",command.comm[0],command.comm[1],command.comm[2]);
+#else
+    if ((command.comm[0] != 's') || (command.next_idx != 2)) return 1;
+    int t = command.comm[1];
+    if (t >= 130){
+        transmit("%c: Failed, no transducer %i", command.comm[0], t);
+        return 0;
+    }
+    int id = t/26;
+    if(queue_SPI_tx(id, "s%c%c", t%26, command.comm[2])){//Failed
+        transmit("%c: Failed sending phase %i to id %i, que full.", command.comm[0], command.comm[2], id);
+    } else transmit("%c: Sent phase %i to id %i", command.comm[0], command.comm[2], id);
+#endif
     return 0;
 }
 
+#ifdef MCU_PROTOTYP
 int command_set_period() {
     if ((command.comm[0] != 'p') || (command.next_idx != 1)) return 1;
     set_period(command.comm[1]);
-    transmit("%c: Success. Set period to %u\n",command.comm[0],command.comm[1]);
+    transmit("%c: Success. Set period to %u",command.comm[0],command.comm[1]);
     return 0;
 }
 
@@ -216,10 +349,12 @@ int command_set_delay() {
     SET_SIGNAL_DUR(signal_array[2],command.comm[1],command.comm[2]);
     SET_SIGNAL_DUR(signal_array[1],command.comm[3],command.comm[4]);
     SET_SIGNAL_DUR(signal_array[3],command.comm[3],command.comm[4]);
-    transmit("%c: Success. Up: %u Dur: %u, Up: %u Dur: %u\n",
+    transmit("%c: Success. Up: %u Dur: %u, Up: %u Dur: %u",
             command.comm[0],command.comm[1],command.comm[2],command.comm[3],command.comm[4]);
     return 0;
 }
+#endif
+
 #endif
 /** 
   @Function
