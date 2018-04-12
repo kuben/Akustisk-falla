@@ -72,7 +72,7 @@ char next_SPI_tx_char(){
     return ret;
 }
 
-int queue_SPI_tx(int slave_id, char *str, ...){
+int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
     //Find first empty space in queue
     int q;
     for(q = 0;q < sizeof(spi_queue)/sizeof(struct SPI_transmission);q++){
@@ -81,15 +81,18 @@ int queue_SPI_tx(int slave_id, char *str, ...){
     if(q == sizeof(spi_queue)/sizeof(struct SPI_transmission))
         return 1;//Queue full
     
+    size_t length;
     //Queue transmission
-    static const size_t length = sizeof(((struct SPI_transmission *)0)->str);
-    char temp[length];
-    va_list vlist;
-    va_start(vlist, str);
-    vsnprintf(temp, length, str, vlist);
+    if(command == 'a'){
+        length = 26;
+    } else if(command == 's'){
+        length = 2;
+    } else return 1;
+
+    spi_queue[q].str[0] = command;
     int i;
     for (i = 0; i < length;i++) {
-        spi_queue[q].str[i] = temp[i];
+        spi_queue[q].str[i+1] = data[i];
     }
     spi_queue[q].slave_id = slave_id;
     spi_queue[q].pos = 0;
@@ -99,7 +102,7 @@ int queue_SPI_tx(int slave_id, char *str, ...){
         spi_queue[q+1].slave_id = -1;
     }
     //transmit("Queued SPI Transmission in place %i",q);
-    IEC1bits.SPI1TXIE = 1;
+    T4CONbits.TON = 1;//Let timer start transmission if not busy
     return 0;
 }
 #endif
@@ -141,10 +144,15 @@ void set_period(char period){
 #endif
 
 #ifdef MCU_MASTER
+//Starts or stops interrupts
 void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
 {
-    if(SPI1STATbits.SPIBUSY){
-        UNSEL_ALL_SLAVES;
+    if(!SPI1STATbits.SPIBUSY){
+        if(spi_queue[0].slave_id == -1){
+            UNSEL_ALL_SLAVES;
+        } else {
+            IEC1bits.SPI1TXIE = 1;
+        }
         T4CONbits.TON = 0;
     }
     IFS0bits.T4IF = 0;
@@ -155,7 +163,9 @@ void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
 void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
 {
     //Command has timed out
+#ifndef MCU_SLAVE
     transmit("Command %c timed out, args received: %i",command.comm[0],command.next_idx -1);
+#endif
     command.next_idx = 0;
     clear_command_timeout();
 	// Reset interrupt flag
@@ -168,7 +178,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
 #ifdef MCU_SLAVE
     if(SPI1STATbits.SPIROV){//Overflow has occurred
         SPI1STATbits.SPIROV = 0;
-        //TOGGLE_PIN_A(4);
+        //TOGGLE_PIN_B(10);
     }
     if(SPI1STATbits.SPIRBF){//Recieve
         char rx = SPI1BUF;
@@ -185,6 +195,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
             }
         } else {
             if ((command.comm[0] == 'a') && (command.next_idx == N_SIGNALS)) {
+                TOGGLE_PIN_B(10);
                 int i;
                 for (i = 1;i <= N_SIGNALS; i++){
                     set_single(i-1,command.comm[i]);                
@@ -192,7 +203,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
                 command.next_idx = 0;
                 clear_command_timeout();        
                 UPDATE_LATVECT_SET;
-            } else if ((command.comm[0] == 'a') && (command.next_idx == N_SIGNALS)) {
+            } else if ((command.comm[0] == 's') && (command.next_idx == 2)) {
                 set_single(command.comm[1],command.comm[2]);
                 command.next_idx = 0;
                 clear_command_timeout();  
@@ -206,7 +217,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
 #else
     if(SPI1STATbits.SPITBE){
         if((spi_queue[0].slave_id == -1) || (spi_queue[0].pos == -1)){//Transmission done
-            TOGGLE_PIN_A(4);
+            //TOGGLE_PIN_A(4);
         } else {
             SPI1BUF = next_SPI_tx_char();
         }
@@ -301,7 +312,7 @@ int command_set_all() {
     if((command.comm[0] != 'a') || (command.next_idx != 130)) return 1;
     int i,id = 0;
     for(i = 1;i < 130; i += 26){
-        if(queue_SPI_tx(id, "a%.*s", 26, command.comm + i)){//Failed
+        if(queue_SPI_tx(id, 'a', command.comm + i)){//Failed
             transmit("%c: Failed on id %i, queue full.", command.comm[0], id);
             break;
         }
@@ -328,7 +339,8 @@ int command_set_single() {
         return 0;
     }
     int id = t/26;
-    if(queue_SPI_tx(id, "s%c%c", t%26, command.comm[2])){//Failed
+    char data[2] = {t%26, command.comm[2]};
+    if(queue_SPI_tx(id, 's', data)){//Failed
         transmit("%c: Failed sending phase %i to id %i, que full.", command.comm[0], command.comm[2], id);
     } else transmit("%c: Sent phase %i to id %i", command.comm[0], command.comm[2], id);
 #endif

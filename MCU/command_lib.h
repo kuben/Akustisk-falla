@@ -42,7 +42,7 @@ static volatile struct SPI_transmission spi_queue[10] = {{.pos = -1,.slave_id = 
 
 int shift_queue();
 char next_SPI_tx_char();
-int queue_SPI_tx(int slave_id, char *str, ...);
+int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data);
 #endif
 void restart_command_timeout();
 void clear_command_timeout();

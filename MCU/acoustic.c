@@ -86,6 +86,22 @@ int main(int argc, char** argv) {
     InitializeSystem();
 #ifdef MCU_SLAVE
     initSlaveSPI();
+    TRISBbits.TRISB10 = 0;
+    TRISASET = 0x0480;//Programming pins A7 A10 inputs
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
+    TOGGLE_PIN_B(10);
 #else
     initUART();
     transmit("Hello World");
@@ -237,13 +253,12 @@ void initSlaveSPI(void)
     SPI1CONbits.SSEN = 1;       // In slave mode
     //SPI1CONbits.SRXISEL = 0b01;
     
-    RPB6Rbits.RPB6R = 0b0011;//RPB6 (pin 15) SPI MISO. Also PGEC3
-    TRISBbits.TRISB6 = 0;//An output
-    SDI1Rbits.SDI1R = 0b0001;//RPB5 (pin 14) SPI MOSI. Also PGED3
-    SS1R   = 0x00000004;//RPB7 (pin 16) SPI SS
-    //TRISBbits.TRISB5 = 1;
-    TRISBbits.TRISB7 = 1;
-    TRISBbits.TRISB14 = 1;
+    RPB13Rbits.RPB13R = 3;//RPB13 (pin 15) SPI MISO
+    SDI1Rbits.SDI1R = 3;//RPB11 SPI MOSI. Also PGEC2
+    SS1R   = 3;//RPB15 (pin ) SPI SS
+    TRISBbits.TRISB13 = 0;//An output
+    TRISBbits.TRISB11 = 1;
+    TRISBbits.TRISB15 = 1;
     //SCK1 (pin 25) SPI CLK
     
     SPI1CONbits.ON = 1;         // Turn module on
@@ -265,7 +280,8 @@ void initMasterSPI(){
     /* SPI1CON settings */
     SPI1CONbits.CKE = 1;        // Output data changes on transition from idle to active
     SPI1CONbits.MSTEN = 1;       // In master mode
-    SPI1BRG = 100;                //PB-clock 20MHz, divide by 100 
+    //Tar drygt 2ms per slave kort och 'a'-kommando
+    SPI1BRG = 100;                //PB-clock 20MHz, divide by 100
     
     //SCK1 (pin 25) SPI CLK
     RPB6Rbits.RPB6R = 0b0011;//RPB6 (pin 15) SPI MISO. Also PGEC3
