@@ -5,8 +5,8 @@
 
 //#define DEBUG
 //#define MCU_PROTOTYP
-//#define MCU_SLAVE
-#define MCU_MASTER
+#define MCU_SLAVE
+//#define MCU_MASTER
 
 
 #ifdef MCU_PROTOTYP
@@ -21,6 +21,8 @@ struct signal {
 #endif
 #ifdef MCU_SLAVE
 #define N_SIGNALS 26
+#define STEG 25
+#define FAS(t) t*STEG/(period+1)
 struct signal {
     unsigned char up;
 };

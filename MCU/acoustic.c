@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
     }
     SET_SIGNAL(signal_array[1],125);
     i = 0;
-    uint32_t LATA_vect[256] = {}, LATB_vect[256] = {},LATC_vect[256] = {};
+    uint32_t LATA_vect[STEG] = {}, LATB_vect[STEG] = {},LATC_vect[STEG] = {};
     gen_LAT_vects(LATA_vect, LATB_vect,LATC_vect);
 #endif
 #ifdef MCU_PROTOTYP
@@ -145,9 +145,9 @@ int main(int argc, char** argv) {
     while(1) {
 #ifdef MCU_SLAVE
         if (UPDATE_LATVECT) gen_LAT_vects(LATA_vect, LATB_vect, LATC_vect);
-        LATA = LATA_vect[TMR4];
-        LATB = LATB_vect[TMR4];
-        LATC = LATC_vect[TMR4];
+        LATA = LATA_vect[FAS(TMR4)];
+        LATB = LATB_vect[FAS(TMR4)];
+        LATC = LATC_vect[FAS(TMR4)];
 #endif
 #ifdef MCU_PROTOTYP
         //7 timer steg per varv
@@ -188,19 +188,19 @@ void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect){
 #endif
 #ifdef MCU_SLAVE
 void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect){
-    memset(LATA_vect,0,sizeof(uint32_t)*256);
-    memset(LATB_vect,0,sizeof(uint32_t)*256);
-    memset(LATC_vect,0,sizeof(uint32_t)*256);
+    memset(LATA_vect,0,sizeof(uint32_t)*STEG);
+    memset(LATB_vect,0,sizeof(uint32_t)*STEG);
+    memset(LATC_vect,0,sizeof(uint32_t)*STEG);
     int s;
     for(s = 0;s < N_SIGNALS;s++){
-        unsigned char t = signal_array[s].up;
+        unsigned char t = FAS(signal_array[s].up);
         int i;
-        for (i = 0;i < (period+1)/2;i++){
+        for (i = 0;i < STEG/2;i++){
             LATA_vect[t] |= outputs[s].A_mask;
             LATB_vect[t] |= outputs[s].B_mask;
             LATC_vect[t] |= outputs[s].C_mask;
             t++;
-            if (t >= period) t = 0;
+            if (t >= STEG) t = 0;
         }
     }
     UPDATE_LATVECT_CLR;
