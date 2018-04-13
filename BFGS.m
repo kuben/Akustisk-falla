@@ -2,6 +2,16 @@ function [minLaplPhase,minLaplVal] = BFGS(pos,startPhase,randomStart,randomStart
 % Calculates a minimum of the laplacian of the Gor'kov
 % potential at a position pos, from given a start phase.
 % Needs lapl.m.
+% Ex:
+% BFGS(pos,startPhase,randomStart,randomStartNumPoints)
+% 
+% pos is the position where - the laplacian of the Gor'kov potential is
+% optimised
+% startPhase is from where the optimisation starts
+% randomStart is if you want a randomised start phase. startPhase is
+% therefore rendered obsolete?
+% randomStartNumPoints is the number of phases that are randomised
+
     T = Transducer.list_transducers();    
     
     if ~exist('startPhase','var') || isempty(startPhase)
