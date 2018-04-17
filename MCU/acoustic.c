@@ -53,6 +53,7 @@ void initMasterSPI();
 #endif
 
 #ifndef MCU_MASTER
+void init_signals();
 #ifdef MCU_PROTOTYP
 void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect);
 #else
@@ -88,29 +89,12 @@ int main(int argc, char** argv) {
     initSlaveSPI();
     TRISBbits.TRISB10 = 0;
     TRISASET = 0x0480;//Programming pins A7 A10 inputs
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
-    TOGGLE_PIN_B(10);
 #else
     initUART();
     transmit("Hello World");
 #ifdef MCU_MASTER
     initMasterSPI();
-#endif
-#endif
     
-#ifdef MCU_MASTER
     TRISAbits.TRISA1 = 0;
     TRISBbits.TRISB4 = 0;
     TRISAbits.TRISA4 = 0;
@@ -120,25 +104,17 @@ int main(int argc, char** argv) {
     
     volatile int i = 0;
 #endif
+#endif
+    
+#ifndef MCU_MASTER
+    init_signals();
 #ifdef MCU_SLAVE
-    int i;
-    for (i = 0;i < N_SIGNALS; i++){
-        PIN_CONF_OUTPUT(outputs[i]);
-        SET_SIGNAL(signal_array[i],0);
-    }
-    SET_SIGNAL(signal_array[1],125);
-    i = 0;
     uint32_t LATA_vect[STEG] = {}, LATB_vect[STEG] = {},LATC_vect[STEG] = {};
     gen_LAT_vects(LATA_vect, LATB_vect,LATC_vect);
-#endif
-#ifdef MCU_PROTOTYP
-    SET_SIGNAL_DUR(signal_array[0],0,124);
-    SET_SIGNAL_DUR(signal_array[1],124,124);
-    SET_SIGNAL_DUR(signal_array[2],0,124);
-    SET_SIGNAL_DUR(signal_array[3],124,124);
-    
+#else    
     uint32_t LATA_vect[256] = {}, LATB_vect[256] = {};
     gen_LAT_vects(LATA_vect, LATB_vect);
+#endif
 #endif
    
     //Run
@@ -194,6 +170,7 @@ void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect
     int s;
     for(s = 0;s < N_SIGNALS;s++){
         unsigned char t = FAS(signal_array[s].up);
+        if(t > STEG) continue;//Transducer is off, continue
         int i;
         for (i = 0;i < STEG/2;i++){
             LATA_vect[t] |= outputs[s].A_mask;
@@ -206,6 +183,24 @@ void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect
     UPDATE_LATVECT_CLR;
 }
 #endif
+
+void init_signals(){
+#ifdef MCU_SLAVE
+    int i;
+    for (i = 0;i < N_SIGNALS; i++){
+        PIN_CONF_OUTPUT(outputs[i]);
+        SET_SIGNAL(signal_array[i],0);
+    }
+    SET_SIGNAL(signal_array[24],125);
+    SET_SIGNAL(signal_array[25],255);
+#endif
+#ifdef MCU_PROTOTYP
+    SET_SIGNAL_DUR(signal_array[0],0,124);
+    SET_SIGNAL_DUR(signal_array[1],124,124);
+    SET_SIGNAL_DUR(signal_array[2],0,124);
+    SET_SIGNAL_DUR(signal_array[3],124,124);
+#endif
+}
 
 #ifndef MCU_SLAVE
 void initUART() {

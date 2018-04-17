@@ -5,8 +5,8 @@
 
 //#define DEBUG
 //#define MCU_PROTOTYP
-#define MCU_SLAVE
-//#define MCU_MASTER
+//#define MCU_SLAVE
+#define MCU_MASTER
 
 
 #ifdef MCU_PROTOTYP

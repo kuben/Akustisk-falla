@@ -37,34 +37,33 @@ int transmit(char *new_status, ...) {
 #ifdef MCU_MASTER
 int shift_queue(){
     int i;
-    for(i = 1;i < sizeof(spi_queue)/sizeof(struct SPI_transmission);i++){
+    for(i = 1;i < SPI_QUEUE_LEN;i++){
         if(spi_queue[i].slave_id == -1){//Empty, stop shifting
             spi_queue[i-1].slave_id = -1;
             break;
         }
         spi_queue[i-1].slave_id = spi_queue[i].slave_id;
-        spi_queue[i-1].pos = 0;
+        spi_queue[i-1].pos = -1;
+        spi_queue[i-1].command = spi_queue[i].command;
         int j;
-        for(j = 0;j < sizeof(((struct SPI_transmission *)0)->str);j++){
-            spi_queue[i-1].str[j] = spi_queue[i].str[j];
-            //if(!spi_queue[i].str[j]) break;//Reached 0, no need to copy further
+        for(j = 0;j < COMM_LEN(spi_queue[i].command);j++){
+            spi_queue[i-1].data[j] = spi_queue[i].data[j];
         }
     }
     if(i == 1) return 1;//Queue is now empty
     return 0;
 }
 
-int end_of_SPI_command(){//If current char is last one
-    if((spi_queue[0].str[0] == 'a') && (spi_queue[0].pos > 27)) return 1;
-    if((spi_queue[0].str[0] == 's') && (spi_queue[0].pos > 2)) return 1;
-    return 0;
-}
-
 char next_SPI_tx_char(){
-    if(!spi_queue[0].pos) SEL_SLAVE(spi_queue[0].slave_id);//First char
-    char ret = spi_queue[0].str[spi_queue[0].pos];
+    char ret;
+    if(spi_queue[0].pos == -1){//First char
+        SEL_SLAVE(spi_queue[0].slave_id);
+        ret = spi_queue[0].command;
+    } else {
+        ret = spi_queue[0].data[spi_queue[0].pos];
+    }
     spi_queue[0].pos++;
-    if(end_of_SPI_command()){
+    if(spi_queue[0].pos > COMM_LEN(spi_queue[0].command)){//End of command
         shift_queue();//Shift everything forward in queue
         IEC1bits.SPI1TXIE = 0;//Disable interrupts
         T4CONbits.TON = 1;//Wait for SPIBUSY before deselecting slave
@@ -75,30 +74,21 @@ char next_SPI_tx_char(){
 int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
     //Find first empty space in queue
     int q;
-    for(q = 0;q < sizeof(spi_queue)/sizeof(struct SPI_transmission);q++){
+    for(q = 0;q < SPI_QUEUE_LEN;q++){
         if(spi_queue[q].slave_id == -1) break;
     }
-    if(q == sizeof(spi_queue)/sizeof(struct SPI_transmission))
-        return 1;//Queue full
+    if(q == SPI_QUEUE_LEN) return 1;//Queue full
     
-    size_t length;
-    //Queue transmission
-    if(command == 'a'){
-        length = 26;
-    } else if(command == 's'){
-        length = 2;
-    } else return 1;
-
-    spi_queue[q].str[0] = command;
+    spi_queue[q].command = command;
     int i;
-    for (i = 0; i < length;i++) {
-        spi_queue[q].str[i+1] = data[i];
+    for (i = 0; i < COMM_LEN(command);i++) {
+        spi_queue[q].data[i] = data[i];
     }
     spi_queue[q].slave_id = slave_id;
-    spi_queue[q].pos = 0;
+    spi_queue[q].pos = -1;
     
     //If room in queue, set next id -1
-    if(q+1 < sizeof(spi_queue)/sizeof(struct SPI_transmission)){
+    if(q+1 < SPI_QUEUE_LEN){
         spi_queue[q+1].slave_id = -1;
     }
     //transmit("Queued SPI Transmission in place %i",q);
@@ -216,7 +206,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
     }
 #else
     if(SPI1STATbits.SPITBE){
-        if((spi_queue[0].slave_id == -1) || (spi_queue[0].pos == -1)){//Transmission done
+        if(spi_queue[0].slave_id == -1){//Transmission done
             //TOGGLE_PIN_A(4);
         } else {
             SPI1BUF = next_SPI_tx_char();
@@ -318,7 +308,7 @@ int command_set_all() {
         }
         id++;
     }
-    if (id == 5) transmit("%c: Sent phases to id 0 to 4",command.comm[0]);
+    if (id == 5) transmit("%c: Sent phases to id 0 through 4",command.comm[0]);
     return 0;
 #endif
 }

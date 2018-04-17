@@ -32,13 +32,16 @@ int transmit(char *new_status, ...);
 
 struct SPI_transmission {
     signed int slave_id;//-1 when empty spot in queue
-    signed int pos;
-    char str[50];
+    signed int pos;//-1 when transmitting command char
+    char command;//'a' or 's'
+    char data[26];
 };
+#define COMM_LEN(comm) ((comm == 'a')?26:((comm == 's')?2:0))
 
 //#define TRANSMITTING (tx_buffer.pos > -1)
 
-static volatile struct SPI_transmission spi_queue[10] = {{.pos = -1,.slave_id = -1}};
+#define SPI_QUEUE_LEN 10
+static volatile struct SPI_transmission spi_queue[SPI_QUEUE_LEN] = {{.slave_id = -1}};
 
 int shift_queue();
 char next_SPI_tx_char();
