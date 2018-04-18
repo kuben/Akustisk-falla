@@ -3,7 +3,6 @@
 
 #include <xc.h>
 
-//#define DEBUG
 //#define MCU_PROTOTYP
 //#define MCU_SLAVE
 #define MCU_MASTER
@@ -18,6 +17,10 @@ struct signal {
 #define SET_SIGNAL_DUR(signal,delay,dur) {signal.up = delay;\
                                  signal.down = delay + dur;\
                                  if(signal.down >= period) signal.down -= period;}
+extern volatile unsigned char period;
+//#define UPDATE_PERIOD (update & 0x1)
+//#define UPDATE_PERIOD_SET update |= 0x1
+//#define UPDATE_PERIOD_CLR update &= ~(0x1)
 #endif
 #ifdef MCU_SLAVE
 #define N_SIGNALS 26
@@ -27,37 +30,17 @@ struct signal {
     unsigned char up;
 };
 #define SET_SIGNAL(signal,delay) signal.up = delay
+extern const char period;
 #endif
 
 #ifndef MCU_MASTER
 extern volatile struct signal signal_array[N_SIGNALS];
 
 extern volatile int update;
-extern volatile unsigned char period;
-//static volatile unsigned int flashes = 0;
-
-//#define SGNLUP(u_gt_d,i_gt_u,i_lt_d) u_gt_d?(i_gt_u || i_lt_d):(i_gt_u && i_lt_d)
-//#define SIGNAL_UP(i,up,dn) SGNLUP((up > dn),(i >= up),(i<dn))
-
-//#define UPDATE_PERIOD (update & 0x1)
 #define UPDATE_LATVECT (update & 0x2)
-//#define UPDATE_PERIOD_SET update |= 0x1
 #define UPDATE_LATVECT_SET update |= 0x2
-//#define UPDATE_PERIOD_CLR update &= ~(0x1)
 #define UPDATE_LATVECT_CLR update &= ~(0x2)
 
-#endif
-
-#define GET_PIN_A(i) (PORTA & (1<<(i)))
-#define GET_PIN_B(i) (PORTB & (1<<(i)))
-#define TOGGLE_PIN_A(i) (LATA = GET_PIN_A(i)^(1<<(i)))
-#define TOGGLE_PIN_B(i) (LATB = GET_PIN_B(i)^(1<<(i)))
-#define SET_PIN_A(i,x) if(x) LATASET = (1<<(i)); else LATACLR = (1<<(i))
-#define SET_PIN_B(i,x) if(x) LATBSET = (1<<(i)); else LATBCLR = (1<<(i))
-
-#ifdef MCU_MASTER
-#define SEL_SLAVE(i) LATB = (PORTB|0x0f80)^(1<<(7+i)) //Slave 0 - RB7
-#define UNSEL_ALL_SLAVES LATBSET = 0x0f80
 #endif
 
 struct pin_struct {
@@ -69,18 +52,31 @@ struct pin_struct {
 };
 
 #ifndef MCU_SLAVE
-#define PIN_CONF_OUTPUT(pin) TRISACLR = pin.A_mask; TRISBCLR = pin.B_mask
-#define PIN_SET(pin) LATASET = pin.A_mask; LATBSET = pin.B_mask
-#define PIN_CLR(pin) LATACLR = pin.A_mask; LATBCLR = pin.B_mask
+#define PIN_CONF_OUTPUT(pin) TRISACLR = (pin).A_mask; TRISBCLR = (pin).B_mask
+#define PIN_SET(pin) LATASET = (pin).A_mask; LATBSET = (pin).B_mask
+#define PIN_CLR(pin) LATACLR = (pin).A_mask; LATBCLR = (pin).B_mask
+#define PIN_GET(pin) ((PORTA & (pin).A_mask) || (PORTB & (pin).B_mask))
+#define PIN_TOGGLE(pin) {LATAINV = (pin).A_mask; LATBINV = (pin).B_mask;}
 #else
-#define PIN_CONF_OUTPUT(pin) TRISACLR = pin.A_mask; TRISBCLR = pin.B_mask; TRISCCLR = pin.C_mask
-#define PIN_SET(pin) LATASET = pin.A_mask; LATBSET = pin.B_mask; LATCSET = pin.C_mask
-#define PIN_CLR(pin) LATACLR = pin.A_mask; LATBCLR = pin.B_mask LATCCLR = pin.C_mask
+#define PIN_CONF_OUTPUT(pin) TRISACLR = (pin).A_mask; TRISBCLR = (pin).B_mask; TRISCCLR = (pin).C_mask
+#define PIN_SET(pin) LATASET = (pin).A_mask; LATBSET = (pin).B_mask; LATCSET = (pin).C_mask
+#define PIN_CLR(pin) LATACLR = (pin).A_mask; LATBCLR = (pin).B_mask LATCCLR = (pin).C_mask
+#define PIN_GET(pin) ((PORTA & (pin).A_mask) || (PORTB & (pin).B_mask) || (PORTC & (pin).C_mask))
+#define PIN_TOGGLE(pin) {LATAINV = (pin).A_mask; LATBINV = (pin).B_mask; LATCINV = (pin).C_mask;}
 #endif
 #define PIN_A_STRUCT(i) (struct pin_struct) { .A_mask = 1<<i}
 #define PIN_B_STRUCT(i) (struct pin_struct) { .B_mask = 1<<i}
 #ifdef MCU_SLAVE
 #define PIN_C_STRUCT(i) (struct pin_struct) { .C_mask = 1<<i}
+#endif
+
+
+#ifdef MCU_MASTER
+#define SEL_SLAVE(i) LATB = (PORTB|0x0f80)^(1<<(7+i)) //Slave 0 - RB7
+#define UNSEL_ALL_SLAVES LATBSET = 0x0f80
+#define PIN_GREEN PIN_A_STRUCT(4)
+#define PIN_YELLOW PIN_B_STRUCT(4)
+#define PIN_RED PIN_A_STRUCT(3)
 #endif
 
 #endif

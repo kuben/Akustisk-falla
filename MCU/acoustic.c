@@ -39,7 +39,11 @@
 #ifndef MCU_MASTER
 volatile struct signal signal_array[N_SIGNALS] = {0};
 volatile int update = 0;
+#ifdef MCU_PROTOTYP
 volatile unsigned char period = 249;
+#else
+const char period = 249;
+#endif
 #endif
 
 void InitializeSystem(void);
@@ -95,14 +99,14 @@ int main(int argc, char** argv) {
 #ifdef MCU_MASTER
     initMasterSPI();
     
-    TRISAbits.TRISA1 = 0;
-    TRISBbits.TRISB4 = 0;
-    TRISAbits.TRISA4 = 0;
-    SET_PIN_A(1,0);
-    SET_PIN_A(4,0);
-    SET_PIN_B(4,0);
+    PIN_CONF_OUTPUT(PIN_RED);
+    PIN_CONF_OUTPUT(PIN_YELLOW);
+    PIN_CONF_OUTPUT(PIN_GREEN);
+    PIN_CLR(PIN_RED);
+    PIN_CLR(PIN_YELLOW);
+    PIN_CLR(PIN_GREEN);
     
-    volatile int i = 0;
+    volatile int i = 0;//So the compiler doesn't optimize the infinite while loop
 #endif
 #endif
     
@@ -135,7 +139,7 @@ int main(int argc, char** argv) {
         i++;
         if(i == 1000000){
             i = 0;
-            TOGGLE_PIN_A(1);
+            PIN_TOGGLE(PIN_GREEN);
         }
 #endif
     }
@@ -291,26 +295,20 @@ void initMasterSPI(){
 
 void InitializeSystem(void)
 {
-    // PIC32MX CPU Speed Optimizations (Cache/Wait States/Peripheral Bus Clks)
-    // On reset, and after c-startup:
-    // - Prefetch Buffer is disabled,
-    // - I Cache is disabled,
-    // - PFM wait States set to max setting (7 = too slow!!!)
-    // - Data Memory SRAM wait states set to max setting (1 = too slow!!!)
-    
-    // PBCLK - already set to SYSCLK/8 via config settings
-    
-    // Data Memory SRAM wait states: Default Setting = 1; set it to 0
     BMXCONbits.BMXWSDRM = 0;
-
-    // Flash PM Wait States: MX Flash runs at 2 wait states @ 80 MHz
-    //CHECONbits.PFMWS = 2;
-
-    // Prefetch-cache: Enable prefetch for cacheable PFM instructions
-    //CHECONbits.PREFEN = 1;
-
+    
+    //ADC
     ANSELA = 0;
     ANSELB = 0;
+#ifdef MCU_MASTER
+    TRISASET = 3;
+    ANSELA = 1;
+    AD1CON1bits.ON = 0;
+    AD1CON1bits.SSRC = 0b111;
+    AD1CON1bits.ASAM = 0;//No auto sample
+    AD1CON3bits.SAMC = 0b11111;//sample time = 32 sample periods
+    AD1CON3bits.ADCS = 0;//Sample period = clock period * 2 * (ADCS + 1)
+#endif
     
     /* Let Timer 2 (in 32-bit mode) be command time-out timer 
      * Timer 4 be 40kHz-timer

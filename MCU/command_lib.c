@@ -92,6 +92,7 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
         spi_queue[q+1].slave_id = -1;
     }
     //transmit("Queued SPI Transmission in place %i",q);
+    PIN_SET(PIN_YELLOW);
     T4CONbits.TON = 1;//Let timer start transmission if not busy
     return 0;
 }
@@ -140,6 +141,7 @@ void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
     if(!SPI1STATbits.SPIBUSY){
         if(spi_queue[0].slave_id == -1){
             UNSEL_ALL_SLAVES;
+            PIN_CLR(PIN_YELLOW);
         } else {
             IEC1bits.SPI1TXIE = 1;
         }
@@ -207,7 +209,6 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
 #else
     if(SPI1STATbits.SPITBE){
         if(spi_queue[0].slave_id == -1){//Transmission done
-            //TOGGLE_PIN_A(4);
         } else {
             SPI1BUF = next_SPI_tx_char();
         }
@@ -220,26 +221,21 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
 void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void) 
 { 
     if(U1STAbits.OERR){//Overflow has occurred
-        //SET_PIN_A(1,1);
         //SPI1STATbits.SPIROV = 0;
-        //flashes++;
-        //LATAbits.LATA2 = !PORTAbits.RA2;//Toggle RA2
     }
     if(U1STAbits.PERR){//Overflow has occurred
-       //SET_PIN_A(1,1);
     }
     if(U1STAbits.FERR){//Overflow has occurred
-        //SET_PIN_A(1,1);
     }
     if(!U1STAbits.UTXBF && TRANSMITTING){//If space in transmit buffer and transmitting
         U1TXREG = next_tx_char();
     }
     if(U1STAbits.URXDA){//Recieve
-        //TOGGLE_PIN_A(1);
         char rx = U1RXREG;
-        //SET_SIGNAL_DUR(signal_array[2],rx,124);
+#ifdef MCU_MASTER
+        PIN_SET(PIN_GREEN);
+#endif
         if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
-        //flashes = command.next_idx;
         command.comm[command.next_idx] = rx;
         if (command.next_idx == 0) {
             switch(rx) {
@@ -248,6 +244,8 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
 #ifdef MCU_PROTOTYP
                 case 'p'://Period
                 case 'd':
+#else
+                case 'r'://Read amperage and voltage
 #endif
                     command.next_idx++;
                     restart_command_timeout();
@@ -261,6 +259,8 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
 #ifdef MCU_PROTOTYP
                     && command_set_period()
                     && command_set_delay()
+#else
+                    && command_read()
 #endif
                     ){//None of the commands
                 command.next_idx++;
@@ -268,7 +268,10 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
             } else {
                 command.next_idx = 0;
                 clear_command_timeout();
-                //TOGGLE_PIN_A(1); För att mäta dödtid efter command
+#ifdef MCU_MASTER
+                PIN_CLR(PIN_GREEN);
+#endif
+                //PIN_TOGGLE(PIN_A_STRUCT(1)); För att mäta dödtid efter command
 #ifdef MCU_PROTOTYP
                 UPDATE_LATVECT_SET;
 #endif
@@ -354,6 +357,33 @@ int command_set_delay() {
     transmit("%c: Success. Up: %u Dur: %u, Up: %u Dur: %u",
             command.comm[0],command.comm[1],command.comm[2],command.comm[3],command.comm[4]);
     return 0;
+}
+#else
+int command_read(){
+    AD1CHSbits.CH0SA = 0;//Sample CH0 - V+
+    AD1CON1bits.ON = 1;
+    volatile int i;
+    for(i = 0;i < 40;i++){}//Wait 2us after turning on ADC
+    AD1CON1bits.SAMP = 1;//Start sampling
+    while(!AD1CON1bits.DONE){}
+    AD1CON1bits.DONE = 0;
+    uint32_t read_adc = ADC1BUF0;
+    float v_plus = 3.3*101*read_adc/1024;
+    AD1CON1bits.ON = 0;
+    
+    AD1CHSbits.CH0SA = 1;//Sample CH1 - current
+    AD1CON1bits.ON = 1;
+    for(i = 0;i < 40;i++){}//Wait 2us after turning on ADC
+    AD1CON1bits.SAMP = 1;//Start sampling
+    while(!AD1CON1bits.DONE){}
+    AD1CON1bits.DONE = 0;
+    read_adc = ADC1BUF0;
+    float current = 3.3*10*read_adc/1024;
+    AD1CON1bits.ON = 0;
+    
+    transmit("%c: Power voltage V+ is %.1fV.\nCurrent drain is %.2fA"
+            ,v_plus,current);
+    return 0;//No arguments
 }
 #endif
 

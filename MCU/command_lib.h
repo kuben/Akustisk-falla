@@ -55,5 +55,6 @@ int command_set_all();
 int command_set_single();
 int command_set_period();
 int command_set_delay();
+int command_read();
 
 #endif
