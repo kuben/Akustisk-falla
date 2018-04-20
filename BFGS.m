@@ -38,8 +38,8 @@ function [minLaplPhase,minLaplVal] = BFGS(pos,startPhase,randomStart,randomStart
     
     opts = optimoptions('fminunc',... 'SpecifyObjectiveGradient', true,
     'HessUpdate','bfgs',...
-    'OptimalityTolerance',1e-8,'MaxFunctionEvaluations',100*length(T),...
-    'StepTolerance',1e-8);
+    'OptimalityTolerance',1e-2,'MaxFunctionEvaluations',100*length(T),...
+    'StepTolerance',1e-2);
 
     function BFGSinit_val = BFGSinit(phase)
         BFGSinit_val = laplFunPhase(pos,phase,false);
