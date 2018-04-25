@@ -199,6 +199,10 @@ void init_signals(){
     SET_SIGNAL(signal_array[25],255);
 #endif
 #ifdef MCU_PROTOTYP
+    PIN_CONF_OUTPUT(outputs[0]);
+    PIN_CONF_OUTPUT(outputs[1]);
+    PIN_CONF_OUTPUT(outputs[2]);
+    PIN_CONF_OUTPUT(outputs[3]);
     SET_SIGNAL_DUR(signal_array[0],0,124);
     SET_SIGNAL_DUR(signal_array[1],124,124);
     SET_SIGNAL_DUR(signal_array[2],0,124);
