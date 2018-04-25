@@ -42,9 +42,9 @@ classdef Transducer < handle
     %Klassmetoder
     methods(Static)
         function [p,px,py,pz] = tryck(x,y,z,phase)
-            % omega = 2*pi*40e3;
+            omega = 2*pi*40e3;
             c_0 = 346.13;
-            omega = 2*pi*c_0/0.2*23.5;
+            %omega = 2*pi*c_0/0.2*23.5;
             k = omega/c_0; %Vågtal
             r = 10e-3;
             P_0 = 1e3;
