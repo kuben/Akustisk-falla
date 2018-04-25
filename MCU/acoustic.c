@@ -4,16 +4,16 @@
 #pragma config IOL1WAY = OFF             // Peripheral Pin Select Configuration (Allow only one reconfiguration)
 
 // DEVCFG2
-#pragma config FPLLIDIV = DIV_2         // PLL Input Divider (2x Divider)
+#pragma config FPLLIDIV = DIV_2//DIV_5         // PLL Input Divider (2x Divider)
 #pragma config FPLLMUL = MUL_20         // PLL Multiplier (20x Multiplier)
 #pragma config FPLLODIV = DIV_2         // System PLL Output Clock Divider (PLL Divide by 2)
 //8MHz / 2 * 20 / 2   --> 40MHz
 // DEVCFG1
-#pragma config FNOSC = FRCPLL           // Oscillator Selection Bits (Fast RC Osc with PLL)
+#pragma config FNOSC = FRCPLL//PRIPLL//FRCPLL           // Oscillator Selection Bits (Fast RC Osc with PLL)
 #pragma config FSOSCEN = OFF            // Secondary Oscillator Enable (Disabled)
 #pragma config IESO = OFF               // Internal/External Switch Over (Disabled)
-#pragma config POSCMOD = OFF            // Primary Oscillator Configuration (Primary osc disabled)
-#pragma config OSCIOFNC = OFF           // CLKO Output Signal Active on the OSCO Pin (Disabled)
+#pragma config POSCMOD = OFF//EC//OFF            // Primary Oscillator Configuration (Primary osc disabled)
+#pragma config OSCIOFNC = OFF            // CLKO Output Signal Active on the OSCO Pin (Disabled)
 #pragma config FPBDIV = DIV_2           // Peripheral Clock Divisor (Pb_Clk is Sys_Clk/2 = 20MHz)
 #pragma config FCKSM = CSDCMD           // Clock Switching and Monitor Selection (Clock Switch Disable, FSCM Disabled)
 #pragma config WDTPS = PS1048576        // Watchdog Timer Postscaler (1:1048576)
@@ -42,7 +42,7 @@ volatile int update = 0;
 #ifdef MCU_PROTOTYP
 volatile unsigned char period = 249;
 #else
-const char period = 249;
+const unsigned char period = 249;
 #endif
 #endif
 
@@ -76,10 +76,10 @@ static const struct pin_struct outputs[N_SIGNALS] = {
     PIN_C_STRUCT(4), PIN_B_STRUCT(1),
     PIN_C_STRUCT(5), PIN_B_STRUCT(2),
     PIN_B_STRUCT(5), PIN_B_STRUCT(3),//11 12
-    PIN_B_STRUCT(6), PIN_C_STRUCT(9),
+    PIN_B_STRUCT(6), PIN_C_STRUCT(0),
     PIN_B_STRUCT(7), PIN_C_STRUCT(1),
     PIN_B_STRUCT(8), PIN_C_STRUCT(2),
-    PIN_B_STRUCT(9), PIN_A_STRUCT(2),
+    PIN_B_STRUCT(9), PIN_A_STRUCT(7),//A7 tidigare A2
     PIN_C_STRUCT(6), PIN_A_STRUCT(3),//21 22
     PIN_C_STRUCT(7), PIN_A_STRUCT(8),
     PIN_C_STRUCT(8), PIN_B_STRUCT(4)
@@ -99,10 +99,10 @@ int main(int argc, char** argv) {
 #ifdef MCU_MASTER
     initMasterSPI();
     
-    PIN_CONF_OUTPUT(PIN_RED);
+    //PIN_CONF_OUTPUT(PIN_RED);
     PIN_CONF_OUTPUT(PIN_YELLOW);
     PIN_CONF_OUTPUT(PIN_GREEN);
-    PIN_CLR(PIN_RED);
+    //PIN_CLR(PIN_RED);
     PIN_CLR(PIN_YELLOW);
     PIN_CLR(PIN_GREEN);
     
@@ -174,7 +174,7 @@ void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect
     int s;
     for(s = 0;s < N_SIGNALS;s++){
         unsigned char t = FAS(signal_array[s].up);
-        if(t > STEG) continue;//Transducer is off, continue
+        if(t >= STEG) continue;//Transducer is off, continue
         int i;
         for (i = 0;i < STEG/2;i++){
             LATA_vect[t] |= outputs[s].A_mask;
@@ -302,12 +302,27 @@ void InitializeSystem(void)
     ANSELB = 0;
 #ifdef MCU_MASTER
     TRISASET = 3;
-    ANSELA = 1;
+    ANSELA = 3;
     AD1CON1bits.ON = 0;
-    AD1CON1bits.SSRC = 0b111;
-    AD1CON1bits.ASAM = 0;//No auto sample
+    IPC5bits.AD1IP = 2;
+    IPC5bits.AD1IS = 0;
+    IEC0bits.AD1IE = 1;
+    IFS0bits.AD1IF = 0;
+    Nop();
+    AD1CON1bits.SSRC = 0;//0b111;
+    AD1CON2bits.CSCNA = 0;
+    AD1CON1bits.ASAM = 1;//No auto sample
     AD1CON3bits.SAMC = 0b11111;//sample time = 32 sample periods
-    AD1CON3bits.ADCS = 0;//Sample period = clock period * 2 * (ADCS + 1)
+    AD1CON3bits.ADCS = 1;//Sample period = clock period * 2 * (ADCS + 1)
+    AD1CON1bits.ON = 1;
+    
+    //Configure Clock output
+ //   RPA2R = 0b0111;
+ //   TRISACLR = 0x04;//Set RA2 output
+ //   REFOCONbits.OE = 1;
+ //   REFOCONbits.ROSEL = 0;//System clock
+ //   REFOCONbits.OE = 1;
+ //   REFOCONbits.ON = 1;
 #endif
     
     /* Let Timer 2 (in 32-bit mode) be command time-out timer 

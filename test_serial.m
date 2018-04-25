@@ -11,10 +11,10 @@ while(~isempty(out))
     out = fscanf(s)
 end
 %% Kör för att en i taget slå på alla transducers
-for d = 0:129
-    all_vect = 255*ones(1,130);
+for d = 53%0:129
+    all_vect = 255*ones(1,122);
     all_vect(d+1) = 0;
-    all_vect = matlab_to_mcu_phase(all_vect);%Kastar om ordning
+    all_vect = matlab_to_mcu_phase(all_vect,0);%Kastar om ordning
     fprintf(s,['a' all_vect]);
     fprintf('Slog på transducer %d\n',d);
     pause()

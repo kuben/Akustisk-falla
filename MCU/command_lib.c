@@ -39,7 +39,7 @@ int shift_queue(){
     int i;
     for(i = 1;i < SPI_QUEUE_LEN;i++){
         if(spi_queue[i].slave_id == -1){//Empty, stop shifting
-            spi_queue[i-1].slave_id = -1;
+            spi_queue[i-1].slave_id = -2;//-2 means a sync signal has to be sent
             break;
         }
         spi_queue[i-1].slave_id = spi_queue[i].slave_id;
@@ -56,7 +56,7 @@ int shift_queue(){
 
 char next_SPI_tx_char(){
     char ret;
-    if(spi_queue[0].pos == -1){//First char
+    if(spi_queue[0].pos < 0){//First char
         SEL_SLAVE(spi_queue[0].slave_id);
         ret = spi_queue[0].command;
     } else {
@@ -75,7 +75,7 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
     //Find first empty space in queue
     int q;
     for(q = 0;q < SPI_QUEUE_LEN;q++){
-        if(spi_queue[q].slave_id == -1) break;
+        if(spi_queue[q].slave_id < 0) break;
     }
     if(q == SPI_QUEUE_LEN) return 1;//Queue full
     
@@ -108,7 +108,7 @@ void clear_command_timeout(){
 }
 
 #ifdef MCU_PROTOTYP
-int set_single(char num, char val){
+int set_single(unsigned char num, char val){
     if (num >= N_SIGNALS) {
         return 1;
     }
@@ -117,7 +117,7 @@ int set_single(char num, char val){
 }
 #endif
 #ifdef MCU_SLAVE
-int set_single(char num, char val){
+int set_single(unsigned char num, char val){
     if (num >= N_SIGNALS) {
         return 1;
     }
@@ -139,7 +139,11 @@ void set_period(char period){
 void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
 {
     if(!SPI1STATbits.SPIBUSY){
-        if(spi_queue[0].slave_id == -1){
+        if(spi_queue[0].slave_id == -2){
+            //No more commands, send sync signal
+            IEC1bits.SPI1TXIE = 1;
+        } else if(spi_queue[0].slave_id == -1){
+            //Sync signal sent
             UNSEL_ALL_SLAVES;
             PIN_CLR(PIN_YELLOW);
         } else {
@@ -187,7 +191,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
             }
         } else {
             if ((command.comm[0] == 'a') && (command.next_idx == N_SIGNALS)) {
-                TOGGLE_PIN_B(10);
+                PIN_TOGGLE(PIN_B_STRUCT(10));
                 int i;
                 for (i = 1;i <= N_SIGNALS; i++){
                     set_single(i-1,command.comm[i]);                
@@ -209,6 +213,12 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
 #else
     if(SPI1STATbits.SPITBE){
         if(spi_queue[0].slave_id == -1){//Transmission done
+        } else if (spi_queue[0].slave_id == -2){//Transmission done, but sync not yet sent
+            SEL_ALL_SLAVES;
+            SPI1BUF = 'y';
+            spi_queue[0].slave_id = -1;//Transmission done after this
+            IEC1bits.SPI1TXIE = 0;//Disable interrupts
+            T4CONbits.TON = 1;//Wait for SPIBUSY before deselecting slave
         } else {
             SPI1BUF = next_SPI_tx_char();
         }
@@ -217,6 +227,15 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
     IFS1CLR = 0x70;
  }
 #endif
+
+#ifdef MCU_MASTER
+void __ISR(_ADC_VECTOR, IPL2SOFT) ADC_Interrupt(void)
+{
+    PIN_SET(PIN_YELLOW);
+    IFS0bits.AD1IF = 0;
+}
+#endif
+
 #ifndef MCU_SLAVE
 void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void) 
 { 
@@ -244,12 +263,15 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
 #ifdef MCU_PROTOTYP
                 case 'p'://Period
                 case 'd':
-#else
-                case 'r'://Read amperage and voltage
 #endif
                     command.next_idx++;
                     restart_command_timeout();
                     break;
+#ifdef MCU_MASTER
+                case 'r'://Read amperage and voltage
+                    command_read();
+                    break;
+#endif
                 default:
                     transmit("%c not a command",rx);
             }
@@ -259,8 +281,6 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
 #ifdef MCU_PROTOTYP
                     && command_set_period()
                     && command_set_delay()
-#else
-                    && command_read()
 #endif
                     ){//None of the commands
                 command.next_idx++;
@@ -362,15 +382,19 @@ int command_set_delay() {
 int command_read(){
     AD1CHSbits.CH0SA = 0;//Sample CH0 - V+
     AD1CON1bits.ON = 1;
+    AD1CON1CLR = 2;
+    transmit("testing1"); return 0;
     volatile int i;
     for(i = 0;i < 40;i++){}//Wait 2us after turning on ADC
-    AD1CON1bits.SAMP = 1;//Start sampling
+    //AD1CON1CLR = 2;//Start sampling
+    
+    transmit("testing5"); return 0;
     while(!AD1CON1bits.DONE){}
     AD1CON1bits.DONE = 0;
     uint32_t read_adc = ADC1BUF0;
     float v_plus = 3.3*101*read_adc/1024;
     AD1CON1bits.ON = 0;
-    
+    /*
     AD1CHSbits.CH0SA = 1;//Sample CH1 - current
     AD1CON1bits.ON = 1;
     for(i = 0;i < 40;i++){}//Wait 2us after turning on ADC
@@ -379,10 +403,10 @@ int command_read(){
     AD1CON1bits.DONE = 0;
     read_adc = ADC1BUF0;
     float current = 3.3*10*read_adc/1024;
-    AD1CON1bits.ON = 0;
+    AD1CON1bits.ON = 0;*/
     
     transmit("%c: Power voltage V+ is %.1fV.\nCurrent drain is %.2fA"
-            ,v_plus,current);
+            ,v_plus);//,current);
     return 0;//No arguments
 }
 #endif

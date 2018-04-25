@@ -3,10 +3,9 @@
 
 #include <xc.h>
 
-//#define MCU_PROTOTYP
+#define MCU_PROTOTYP
 //#define MCU_SLAVE
-#define MCU_MASTER
-
+//#define MCU_MASTER
 
 #ifdef MCU_PROTOTYP
 #define N_SIGNALS 4
@@ -30,7 +29,7 @@ struct signal {
     unsigned char up;
 };
 #define SET_SIGNAL(signal,delay) signal.up = delay
-extern const char period;
+extern const unsigned char period;
 #endif
 
 #ifndef MCU_MASTER
@@ -74,6 +73,7 @@ struct pin_struct {
 #ifdef MCU_MASTER
 #define SEL_SLAVE(i) LATB = (PORTB|0x0f80)^(1<<(7+i)) //Slave 0 - RB7
 #define UNSEL_ALL_SLAVES LATBSET = 0x0f80
+#define SEL_ALL_SLAVES LATBCLR = 0x0f80
 #define PIN_GREEN PIN_A_STRUCT(4)
 #define PIN_YELLOW PIN_B_STRUCT(4)
 #define PIN_RED PIN_A_STRUCT(3)
