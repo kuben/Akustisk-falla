@@ -1,4 +1,4 @@
-function [laplacian_gor] = laplFunPhase(position,phase,change_phase)
+function [laplacian_gor,tryck_tot] = laplFunPhase(position,phase,change_phase)
 % laplFunPhase Calculates (the negative of) the laplacian of Gorkov' potential in a point
 %   Similar to laplFun, however takes phase as an input argument and determines
 %   the laplacian of the Gorkov potential for given phases and 
@@ -61,7 +61,7 @@ function [laplacian_gor] = laplFunPhase(position,phase,change_phase)
     
     lapl = divergence(X,Y,Z,u,v,w);
     laplacian_gor = mean(mean(mean(lapl(xyz_index,xyz_index,xyz_index))));
-    
+    tryck_tot = mean(mean(mean(p_sum(xyz_index,xyz_index,xyz_index))));
     if change_phase == false
         for i = 1:length(T)
             T(i).phase = phase_before(i);
