@@ -1,45 +1,40 @@
 #ifndef _COMMON_H    /* Guard against multiple inclusion */
 #define _COMMON_H
 
-#include <xc.h>
-
-#define MCU_PROTOTYP
+//#define MCU_PROTOTYP
 //#define MCU_SLAVE
-//#define MCU_MASTER
+#define MCU_MASTER
+
+#include <xc.h>
 
 #ifdef MCU_PROTOTYP
 #define N_SIGNALS 4
+#define PERIOD 249
 struct signal {
     unsigned char up;
     unsigned char down;
 };
 #define SET_SIGNAL_DUR(signal,delay,dur) {signal.up = delay;\
                                  signal.down = delay + dur;\
-                                 if(signal.down >= period) signal.down -= period;}
-extern volatile unsigned char period;
-//#define UPDATE_PERIOD (update & 0x1)
-//#define UPDATE_PERIOD_SET update |= 0x1
-//#define UPDATE_PERIOD_CLR update &= ~(0x1)
+                                 if(signal.down >= 250) signal.down -= 250;}
+
+extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD];
 #endif
 #ifdef MCU_SLAVE
 #define N_SIGNALS 26
-#define STEG 25
-#define FAS(t) t*STEG/(period+1)
+#define PRESCALE_TMR 4
+#define PERIOD 62//Pbclk/40kHz/2^PRESCALE_TMR - 1=  1000/2^PRESCALE_TMR - 1
 struct signal {
     unsigned char up;
 };
 #define SET_SIGNAL(signal,delay) signal.up = delay
-extern const unsigned char period;
+extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD],LATC_vect[PERIOD];
 #endif
+#define FAS(t) t*(PERIOD+1)/250
 
 #ifndef MCU_MASTER
 extern volatile struct signal signal_array[N_SIGNALS];
-
-extern volatile int update;
-#define UPDATE_LATVECT (update & 0x2)
-#define UPDATE_LATVECT_SET update |= 0x2
-#define UPDATE_LATVECT_CLR update &= ~(0x2)
-
+extern void gen_LAT_vects();
 #endif
 
 struct pin_struct {
@@ -71,12 +66,12 @@ struct pin_struct {
 
 
 #ifdef MCU_MASTER
-#define SEL_SLAVE(i) LATB = (PORTB|0x0f80)^(1<<(7+i)) //Slave 0 - RB7
+#define SEL_SLAVE(i) LATB = ((PORTB|0x0f80)^(1<<(7+i))) //Slave 0 - RB7
 #define UNSEL_ALL_SLAVES LATBSET = 0x0f80
 #define SEL_ALL_SLAVES LATBCLR = 0x0f80
 #define PIN_GREEN PIN_A_STRUCT(4)
 #define PIN_YELLOW PIN_B_STRUCT(4)
-#define PIN_RED PIN_A_STRUCT(3)
+#define PIN_RED PIN_A_STRUCT(2)
 #endif
 
 #endif

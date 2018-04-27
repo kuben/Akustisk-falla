@@ -1,20 +1,36 @@
-// DEVCFG3
-// USERID = No Setting
+//#define PRAGMA_PROTOTYP
+//#define PRAGMA_SLAVE
+#define PRAGMA_MASTER
+
 #pragma config PMDL1WAY = OFF            // Peripheral Module Disable Configuration (Allow only one reconfiguration)
 #pragma config IOL1WAY = OFF             // Peripheral Pin Select Configuration (Allow only one reconfiguration)
 
-// DEVCFG2
-#pragma config FPLLIDIV = DIV_2//DIV_5         // PLL Input Divider (2x Divider)
-#pragma config FPLLMUL = MUL_20         // PLL Multiplier (20x Multiplier)
-#pragma config FPLLODIV = DIV_2         // System PLL Output Clock Divider (PLL Divide by 2)
-//8MHz / 2 * 20 / 2   --> 40MHz
-// DEVCFG1
-#pragma config FNOSC = FRCPLL//PRIPLL//FRCPLL           // Oscillator Selection Bits (Fast RC Osc with PLL)
 #pragma config FSOSCEN = OFF            // Secondary Oscillator Enable (Disabled)
 #pragma config IESO = OFF               // Internal/External Switch Over (Disabled)
-#pragma config POSCMOD = OFF//EC//OFF            // Primary Oscillator Configuration (Primary osc disabled)
-#pragma config OSCIOFNC = OFF            // CLKO Output Signal Active on the OSCO Pin (Disabled)
+#pragma config FPLLMUL = MUL_20         // PLL Multiplier (20x Multiplier)
+#pragma config FPLLODIV = DIV_2         // System PLL Output Clock Divider (PLL Divide by 2)
+#ifdef PRAGMA_SLAVE
+//Slave receives 20MHz clock on PRI. 20MHz /5 *20 /2 = 40MHz
+#pragma config FPLLIDIV = DIV_5 
+#pragma config FNOSC = PRIPLL
+#pragma config POSCMOD = EC
+#else
+//Master and prototype has internal 8MHz. 8MHz /2 *20 /2 = 40MHz
+#pragma config FPLLIDIV = DIV_2
+#pragma config FNOSC = FRCPLL
+#pragma config POSCMOD = OFF
+#endif
+#ifdef PRAGMA_MASTER
+#pragma config OSCIOFNC = ON       // CLKO Output Signal Active on the OSCO Pin (Disabled)
+#else
+#pragma config OSCIOFNC = OFF
+#endif
+#ifdef PRAGMA_SLAVE
+#pragma config FPBDIV = DIV_1           // Peripheral Clock Divisor (Pb_Clk is Sys_Clk = 40MHz)
+#else
 #pragma config FPBDIV = DIV_2           // Peripheral Clock Divisor (Pb_Clk is Sys_Clk/2 = 20MHz)
+#endif
+
 #pragma config FCKSM = CSDCMD           // Clock Switching and Monitor Selection (Clock Switch Disable, FSCM Disabled)
 #pragma config WDTPS = PS1048576        // Watchdog Timer Postscaler (1:1048576)
 #pragma config WINDIS = OFF             // Watchdog Timer Window Enable (Watchdog Timer is in Non-Window Mode)
@@ -38,12 +54,6 @@
 
 #ifndef MCU_MASTER
 volatile struct signal signal_array[N_SIGNALS] = {0};
-volatile int update = 0;
-#ifdef MCU_PROTOTYP
-volatile unsigned char period = 249;
-#else
-const unsigned char period = 249;
-#endif
 #endif
 
 void InitializeSystem(void);
@@ -58,10 +68,9 @@ void initMasterSPI();
 
 #ifndef MCU_MASTER
 void init_signals();
-#ifdef MCU_PROTOTYP
-void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect);
-#else
-void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect);
+volatile uint32_t LATA_vect[PERIOD] = {}, LATB_vect[PERIOD] = {};
+#ifdef MCU_SLAVE
+volatile uint32_t LATC_vect[PERIOD] = {};
 #endif
 
 //Setup outputs
@@ -91,18 +100,16 @@ int main(int argc, char** argv) {
     InitializeSystem();
 #ifdef MCU_SLAVE
     initSlaveSPI();
-    TRISBbits.TRISB10 = 0;
-    TRISASET = 0x0480;//Programming pins A7 A10 inputs
 #else
     initUART();
     transmit("Hello World");
 #ifdef MCU_MASTER
     initMasterSPI();
     
-    //PIN_CONF_OUTPUT(PIN_RED);
+    PIN_CONF_OUTPUT(PIN_RED);
     PIN_CONF_OUTPUT(PIN_YELLOW);
     PIN_CONF_OUTPUT(PIN_GREEN);
-    //PIN_CLR(PIN_RED);
+    PIN_CLR(PIN_RED);
     PIN_CLR(PIN_YELLOW);
     PIN_CLR(PIN_GREEN);
     
@@ -112,26 +119,18 @@ int main(int argc, char** argv) {
     
 #ifndef MCU_MASTER
     init_signals();
-#ifdef MCU_SLAVE
-    uint32_t LATA_vect[STEG] = {}, LATB_vect[STEG] = {},LATC_vect[STEG] = {};
-    gen_LAT_vects(LATA_vect, LATB_vect,LATC_vect);
-#else    
-    uint32_t LATA_vect[256] = {}, LATB_vect[256] = {};
-    gen_LAT_vects(LATA_vect, LATB_vect);
-#endif
+    gen_LAT_vects();
 #endif
    
     //Run
     while(1) {
 #ifdef MCU_SLAVE
-        if (UPDATE_LATVECT) gen_LAT_vects(LATA_vect, LATB_vect, LATC_vect);
-        LATA = LATA_vect[FAS(TMR4)];
-        LATB = LATB_vect[FAS(TMR4)];
-        LATC = LATC_vect[FAS(TMR4)];
+        uint32_t tmr = TMR4;//32bit saves us one asm instruction (zeroing out initial bits)
+        LATA = LATA_vect[tmr];
+        LATB = LATB_vect[tmr];
+        LATC = LATC_vect[tmr];
 #endif
 #ifdef MCU_PROTOTYP
-        //7 timer steg per varv
-        if (UPDATE_LATVECT) gen_LAT_vects(LATA_vect, LATB_vect);
         LATA = LATA_vect[TMR4];
         LATB = LATB_vect[TMR4];
 #endif
@@ -148,43 +147,39 @@ int main(int argc, char** argv) {
 }
 
 #ifdef MCU_PROTOTYP
-//Tar 5000 timer varv med period 249 och 4 signaler
-//I oscilloskop: ca 500us
-void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect){
-    memset(LATA_vect,0,sizeof(uint32_t)*256);
-    memset(LATB_vect,0,sizeof(uint32_t)*256);
-    int s;
+void gen_LAT_vects(){
+    memset(LATA_vect,0,sizeof(uint32_t)*PERIOD);
+    memset(LATB_vect,0,sizeof(uint32_t)*PERIOD);
+    char s;
     for(s = 0;s < N_SIGNALS;s++){
-        unsigned char t = signal_array[s].up;
-        while (t != signal_array[s].down){
-            LATA_vect[t] |= outputs[s].A_mask;
-            LATB_vect[t] |= outputs[s].B_mask;
+        unsigned char t = FAS(signal_array[s].up);
+        while (t != FAS(signal_array[s].down)){
+            LATA_vect[FAS(t)] |= outputs[s].A_mask;
+            LATB_vect[FAS(t)] |= outputs[s].B_mask;
             t++;
-            if (t >= period) t = 0;
+            if (FAS(t) >= PERIOD) t = 0;
         }
     }
-    UPDATE_LATVECT_CLR;
 }
 #endif
 #ifdef MCU_SLAVE
-void gen_LAT_vects(uint32_t *LATA_vect, uint32_t *LATB_vect, uint32_t *LATC_vect){
-    memset(LATA_vect,0,sizeof(uint32_t)*STEG);
-    memset(LATB_vect,0,sizeof(uint32_t)*STEG);
-    memset(LATC_vect,0,sizeof(uint32_t)*STEG);
+void gen_LAT_vects(){
+    memset(LATA_vect,0,sizeof(uint32_t)*PERIOD);
+    memset(LATB_vect,0,sizeof(uint32_t)*PERIOD);
+    memset(LATC_vect,0,sizeof(uint32_t)*PERIOD);
     int s;
     for(s = 0;s < N_SIGNALS;s++){
         unsigned char t = FAS(signal_array[s].up);
-        if(t >= STEG) continue;//Transducer is off, continue
+        if(t >= PERIOD) continue;//Transducer is off, continue
         int i;
-        for (i = 0;i < STEG/2;i++){
+        for (i = 0;i < PERIOD/2;i++){
             LATA_vect[t] |= outputs[s].A_mask;
             LATB_vect[t] |= outputs[s].B_mask;
             LATC_vect[t] |= outputs[s].C_mask;
             t++;
-            if (t >= STEG) t = 0;
+            if (t >= PERIOD) t = 0;
         }
     }
-    UPDATE_LATVECT_CLR;
 }
 #endif
 
@@ -243,26 +238,22 @@ void initSlaveSPI(void)
     IEC1CLR = 0x0070;       // SPI interrupts disabled
     SPI1CON = 0;         // Turn off SPI module
      
-    int rData = SPI1BUF;                // Clear the receive buffer
+    //int rData = SPI1BUF;                // Clear the receive buffer
     IFS1CLR = 0x0070;   //Clear flags (RX,TX,E)
     IPC7bits.SPI1IP = 0b010; //Set priority 2
     IPC7bits.SPI1IS = 0;
-    IEC1SET = 0x0030; //Enable RX and Error interrupt
-    SPI1STATbits.SPIROV = 0;    // Clear overflow flag
-    
+    IEC1SET = 0x0030; //Enable RX and Error interrupt    
      
     /* SPI1CON settings */
     SPI1CONbits.CKE = 1;        // Output data changes on transition from idle to active
     SPI1CONbits.SSEN = 1;       // In slave mode
-    //SPI1CONbits.SRXISEL = 0b01;
     
     RPB13Rbits.RPB13R = 3;//RPB13 (pin 15) SPI MISO
-    SDI1Rbits.SDI1R = 3;//RPB11 SPI MOSI. Also PGEC2
-    SS1R   = 3;//RPB15 (pin ) SPI SS
-    TRISBbits.TRISB13 = 0;//An output
-    TRISBbits.TRISB11 = 1;
-    TRISBbits.TRISB15 = 1;
-    //SCK1 (pin 25) SPI CLK
+    SDI1Rbits.SDI1R   = 3;//RPB11 SPI MOSI. Also PGEC2
+    SS1R              = 3;//RPB15 (pin 15) SPI SS
+    TRISBSET = 0x8800;//11 and 15 inputs
+    TRISBCLR = 0x2000;//13 output
+    //SCK1 (pin 14) SPI CLK
     
     SPI1CONbits.ON = 1;         // Turn module on
 }
@@ -273,7 +264,7 @@ void initMasterSPI(){
     IEC1CLR = 0x0070;       // SPI interrupts disabled
     SPI1CON = 0;         // Turn off SPI module
      
-    int rData = SPI1BUF;                // Clear the receive buffer
+    //int rData = SPI1BUF;                // Clear the receive buffer
     IFS1CLR = 0x0070;   //Clear flags (RX,TX,E)
     IPC7bits.SPI1IP = 0b010; //Set priority 2
     IPC7bits.SPI1IS = 0;
@@ -351,26 +342,19 @@ void InitializeSystem(void)
     IFS0bits.T3IF = 0;// Reset the Timer 2 interrupt flag
     IEC0bits.T3IE = 1;// Enable interrupts from Timer 2
     
-#ifndef MCU_MASTER
     T4CONbits.TON = 0;
-    T4CONbits.TCKPS = 1;// Pre-Scale timer 4 = 1:2 (250 equiv. to 40kHz period)
-    TMR4 = 0;
-    //PR4 = 0xffff;
-    PR4 = period;
-#ifdef DEBUG
-    T4CONbits.TCKPS = 0x7;//For debug 1:256
-    PR4 = 0xffff;
-#endif
-    T4CONbits.TON = 1;
-#else
-    T4CONbits.TON = 0;
+#ifdef MCU_MASTER
     T4CONbits.TCKPS = 1;// Pre-Scale timer 4 = 1:2 (10MHz)
-    TMR4 = 0;//10kHz interrupt
     PR4 = 1000;
     IPC4bits.T4IP = 1;// Set the interrupt priority to 1
     IFS0bits.T4IF = 0;// Reset the Timer 2 interrupt flag
     IEC0bits.T4IE = 1;// Enable interrupts from Timer 2
+#else    
+    T4CONbits.TCKPS = PRESCALE_TMR;
+    PR4 = PERIOD;
 #endif
+    TMR4 = 0;
+    T4CONbits.TON = 1;
     
     /* Set Interrupt Controller for multi-vector mode */
     INTCONSET = _INTCON_MVEC_MASK;

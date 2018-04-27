@@ -63,7 +63,7 @@ char next_SPI_tx_char(){
         ret = spi_queue[0].data[spi_queue[0].pos];
     }
     spi_queue[0].pos++;
-    if(spi_queue[0].pos > COMM_LEN(spi_queue[0].command)){//End of command
+    if(spi_queue[0].pos >= COMM_LEN(spi_queue[0].command)){//End of command
         shift_queue();//Shift everything forward in queue
         IEC1bits.SPI1TXIE = 0;//Disable interrupts
         T4CONbits.TON = 1;//Wait for SPIBUSY before deselecting slave
@@ -109,28 +109,16 @@ void clear_command_timeout(){
 
 #ifdef MCU_PROTOTYP
 int set_single(unsigned char num, char val){
-    if (num >= N_SIGNALS) {
-        return 1;
-    }
+    if (num >= N_SIGNALS) return 1;
     SET_SIGNAL_DUR(signal_array[num],val,124);
     return 0;
 }
 #endif
 #ifdef MCU_SLAVE
 int set_single(unsigned char num, char val){
-    if (num >= N_SIGNALS) {
-        return 1;
-    }
+    if (num >= N_SIGNALS) return 1;
     SET_SIGNAL(signal_array[num],val);
     return 0;
-}
-#endif
-#ifdef MCU_PROTOTYP
-void set_period(char period){
-    T4CONbits.TON = 0;
-    TMR4 = 0;
-    PR4 = period;
-    T4CONbits.TON = 1;   
 }
 #endif
 
@@ -164,8 +152,7 @@ void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
 #endif
     command.next_idx = 0;
     clear_command_timeout();
-	// Reset interrupt flag
-	IFS0bits.T3IF = 0;
+	IFS0bits.T3IF = 0;//Reset interrupt flag
 }
 
 #ifndef MCU_PROTOTYP
@@ -179,7 +166,6 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
     if(SPI1STATbits.SPIRBF){//Recieve
         char rx = SPI1BUF;
         if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
-        //flashes = command.next_idx;
         command.comm[command.next_idx] = rx;
         if (command.next_idx == 0) {
             switch(rx) {
@@ -188,22 +174,24 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
                     command.next_idx++;
                     restart_command_timeout();
                     break;
+                case 'y'://Sync
+                    TMR4 = 0;
+                    break;
             }
         } else {
             if ((command.comm[0] == 'a') && (command.next_idx == N_SIGNALS)) {
-                PIN_TOGGLE(PIN_B_STRUCT(10));
                 int i;
                 for (i = 1;i <= N_SIGNALS; i++){
-                    set_single(i-1,command.comm[i]);                
+                    set_single(i-1,command.comm[i]);
                 }
                 command.next_idx = 0;
-                clear_command_timeout();        
-                UPDATE_LATVECT_SET;
+                clear_command_timeout();
+                gen_LAT_vects();
             } else if ((command.comm[0] == 's') && (command.next_idx == 2)) {
                 set_single(command.comm[1],command.comm[2]);
                 command.next_idx = 0;
-                clear_command_timeout();  
-                UPDATE_LATVECT_SET;
+                clear_command_timeout();
+                gen_LAT_vects();
             } else {
                 command.next_idx++;
                 restart_command_timeout();
@@ -212,7 +200,8 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
     }
 #else
     if(SPI1STATbits.SPITBE){
-        if(spi_queue[0].slave_id == -1){//Transmission done
+        if(spi_queue[0].slave_id == -1){
+            //Transmission done
         } else if (spi_queue[0].slave_id == -2){//Transmission done, but sync not yet sent
             SEL_ALL_SLAVES;
             SPI1BUF = 'y';
@@ -252,7 +241,7 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
     if(U1STAbits.URXDA){//Recieve
         char rx = U1RXREG;
 #ifdef MCU_MASTER
-        PIN_SET(PIN_GREEN);
+        PIN_SET(PIN_RED);
 #endif
         if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
         command.comm[command.next_idx] = rx;
@@ -260,10 +249,6 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
             switch(rx) {
                 case 'a'://All
                 case 's'://Single
-#ifdef MCU_PROTOTYP
-                case 'p'://Period
-                case 'd':
-#endif
                     command.next_idx++;
                     restart_command_timeout();
                     break;
@@ -278,10 +263,6 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
         } else {
             if (command_set_all()
                     && command_set_single()
-#ifdef MCU_PROTOTYP
-                    && command_set_period()
-                    && command_set_delay()
-#endif
                     ){//None of the commands
                 command.next_idx++;
                 restart_command_timeout();            
@@ -289,11 +270,7 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
                 command.next_idx = 0;
                 clear_command_timeout();
 #ifdef MCU_MASTER
-                PIN_CLR(PIN_GREEN);
-#endif
-                //PIN_TOGGLE(PIN_A_STRUCT(1)); För att mäta dödtid efter command
-#ifdef MCU_PROTOTYP
-                UPDATE_LATVECT_SET;
+                PIN_CLR(PIN_RED);
 #endif
             }
         }
@@ -301,15 +278,6 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
     IFS1CLR = 0x0380;
  }
 #endif
-
-/** 
-  @Function
-    int command_set_all() 
-
-  @Returns
-    1 unless command was 'set all' and finished
- * 
- */
 
 #ifndef MCU_SLAVE
 int command_set_all() {
@@ -412,37 +380,3 @@ int command_read(){
 #endif
 
 #endif
-/** 
-  @Function
-    char get_status_char() 
-
-  @Summary
-    Returns the next character from the current status 
-
-  @Description
-    Full description, explaining the purpose and usage of the function.
-    <p>
-    Additional description in consecutive paragraphs separated by HTML 
-    paragraph breaks, as necessary.
-    <p>
-    Type "JavaDoc" in the "How Do I?" IDE toolbar for more information on tags.
-
-  @Precondition
-    List and describe any required preconditions. If there are no preconditions,
-    enter "None."
-
-  @Parameters
-    @param param1 Describe the first parameter to the function.
-    
-    @param param2 Describe the second parameter to the function.
-
-  @Returns
-    The next character in the status message
-
-  @Example
-    @code
-    if(ExampleFunctionName(1, 2) == 0)
-    {
-        return 3;
-    }
- */
