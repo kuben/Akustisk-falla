@@ -1,4 +1,4 @@
-% Test fil för produkten
+% Test fil fÃ¶r produkten
 %% Placement of Transducers
 clc, clear, close all, Transducer.clear_all()
 
@@ -62,6 +62,44 @@ plateHeight = height + 2*(4.19-2.04)*1e-3;
 save('produktTranslatedPhases.mat', 'normPhases', 'intPhases','plateHeight')
 
 
+%% Load
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
+load('produktenTest.mat');
+%% Pressure Weigthing Factor 1
+
+presFactor = logspace(-9,9,200);
+
+weightPhases = zeros(200,122);
+weightTime = zeros(200,1);
+weightVal = zeros(200,122);
+
+for i = 1:length(presFactor)
+    disp(i)
+    tic;
+    [weightPhases(i,:),weightVal(i,:)] = BFGS(minLaplPhase);
+    weightTime(i) = toc;
+    save('pressureWeightingFactor1.mat','weightPhases','weightVal','weightTime')
+end
+
+save('pressureWeightingFactor1.mat','weightPhases','weightTime','weightVal','presFactor')
+
+%% Pressure Weigthing Factor 2
+
+presFactor = logspace(-3,3,200);
+
+weightPhases = zeros(200,122);
+weightTime = zeros(200,1);
+weightVal = zeros(200,122);
+
+for i = 1:length(presFactor)
+    disp(i)
+    tic;
+    [weightPhases(i,:),weightVal(i,:)] = BFGS(minLaplPhase);
+    weightTime(i) = toc;
+    save('pressureWeightingFactor2.mat','weightPhases','weightVal','weightTime')
+end
+
+save('pressureWeightingFactor2.mat','weightPhases','weightTime','weightVal','presFactor')
 
 
 
@@ -76,7 +114,12 @@ save('produktTranslatedPhases.mat', 'normPhases', 'intPhases','plateHeight')
 
 
 
-%% ProduktCircle % onödigt komplicerad enklare metod nedan
+
+
+
+
+
+%% ProduktCircle % onÃ¶digt komplicerad enklare metod nedan
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master'
 clc, clear, Transducer.clear_all()
 
