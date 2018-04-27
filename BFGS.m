@@ -1,4 +1,4 @@
-function [minLaplPhase,minLaplVal] = BFGS(pos,startPhase,randomStart,randomStartNumPoints)
+function [minLaplPhase,minLaplVal] = BFGS(pos,startPhase,randomStart,randomStartNumPoints,presFactor)
 % Calculates a minimum of the laplacian of the Gor'kov
 % potential at a position pos, from given a start phase.
 % Needs lapl.m.
@@ -24,7 +24,8 @@ function [minLaplPhase,minLaplVal] = BFGS(pos,startPhase,randomStart,randomStart
     end
     if ~exist('randomStart','var'), randomStart = false; end
     if ~exist('randomStartNumPoints','var'), randomStartNumPoints = 100; end
-    
+    if ~exist('presFactor','var'), presFactor = 0; end
+        
     if randomStart == true
         testPhase = ((pi/2)*randn(randomStartNumPoints,length(T)));
         testPhase(randomStartNumPoints+1,:) = startPhase;
@@ -42,7 +43,8 @@ function [minLaplPhase,minLaplVal] = BFGS(pos,startPhase,randomStart,randomStart
     'StepTolerance',1e-2);
 
     function BFGSinit_val = BFGSinit(phase)
-        BFGSinit_val = laplFunPhase(pos,phase,false);
+        [laplacian_gor,tryck_tot] = laplFunPhase(pos,phase,false);
+        BFGSinit_val = laplacian_gor+presFactor*tryck_tot;
     end
     
     [minLaplPhase,minLaplVal] = fminunc(@BFGSinit,startPhase,opts);
