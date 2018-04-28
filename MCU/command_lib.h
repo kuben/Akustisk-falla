@@ -49,7 +49,7 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data);
 #endif
 void restart_command_timeout();
 void clear_command_timeout();
-int set_single(unsigned char num, char val);
+int set_single(int num, char val);
 
 int command_set_all();
 int command_set_single();

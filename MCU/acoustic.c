@@ -163,13 +163,21 @@ void gen_LAT_vects(){
 }
 #endif
 #ifdef MCU_SLAVE
+void memset_volatile(volatile void *s, char c, size_t n)
+{
+    volatile char *p = s;
+    while (n-- > 0) {
+        *p++ = c;
+    }
+}
 void gen_LAT_vects(){
-    memset(LATA_vect,0,sizeof(uint32_t)*PERIOD);
-    memset(LATB_vect,0,sizeof(uint32_t)*PERIOD);
-    memset(LATC_vect,0,sizeof(uint32_t)*PERIOD);
+    //400 us with PERIOD 62
+    memset_volatile(LATA_vect,0,sizeof(uint32_t)*PERIOD);
+    memset_volatile(LATB_vect,0,sizeof(uint32_t)*PERIOD);
+    memset_volatile(LATC_vect,0,sizeof(uint32_t)*PERIOD);
     int s;
     for(s = 0;s < N_SIGNALS;s++){
-        unsigned char t = FAS(signal_array[s].up);
+        unsigned char t = FAS(signal_array[s].up);//t = 61
         if(t >= PERIOD) continue;//Transducer is off, continue
         int i;
         for (i = 0;i < PERIOD/2;i++){
@@ -190,8 +198,6 @@ void init_signals(){
         PIN_CONF_OUTPUT(outputs[i]);
         SET_SIGNAL(signal_array[i],0);
     }
-    SET_SIGNAL(signal_array[24],125);
-    SET_SIGNAL(signal_array[25],255);
 #endif
 #ifdef MCU_PROTOTYP
     PIN_CONF_OUTPUT(outputs[0]);

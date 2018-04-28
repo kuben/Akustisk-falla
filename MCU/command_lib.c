@@ -108,14 +108,14 @@ void clear_command_timeout(){
 }
 
 #ifdef MCU_PROTOTYP
-int set_single(unsigned char num, char val){
+int set_single(int num, char val){
     if (num >= N_SIGNALS) return 1;
     SET_SIGNAL_DUR(signal_array[num],val,124);
     return 0;
 }
 #endif
 #ifdef MCU_SLAVE
-int set_single(unsigned char num, char val){
+int set_single(int num, char val){
     if (num >= N_SIGNALS) return 1;
     SET_SIGNAL(signal_array[num],val);
     return 0;
@@ -128,8 +128,10 @@ void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
 {
     if(!SPI1STATbits.SPIBUSY){
         if(spi_queue[0].slave_id == -2){
-            //No more commands, send sync signal
-            IEC1bits.SPI1TXIE = 1;
+            //No more commands
+            volatile int i;
+            for (i = 0;i < 2000;i++);//Wait 500us (measured in oscilloscope)
+            IEC1bits.SPI1TXIE = 1;//Send sync signal
         } else if(spi_queue[0].slave_id == -1){
             //Sync signal sent
             UNSEL_ALL_SLAVES;

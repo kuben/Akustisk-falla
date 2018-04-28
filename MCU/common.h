@@ -30,7 +30,7 @@ struct signal {
 #define SET_SIGNAL(signal,delay) signal.up = delay
 extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD],LATC_vect[PERIOD];
 #endif
-#define FAS(t) t*(PERIOD+1)/250
+#define FAS(t) t*PERIOD/250
 
 #ifndef MCU_MASTER
 extern volatile struct signal signal_array[N_SIGNALS];
