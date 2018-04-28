@@ -136,6 +136,9 @@ int main(int argc, char** argv) {
 #endif
 #ifdef MCU_MASTER
         i++;
+        //if(spi_queue[0].slave_id == -2){
+        //    PIN_SET(PIN_RED);
+        //} else PIN_CLR(PIN_RED);
         if(i == 1000000){
             i = 0;
             PIN_TOGGLE(PIN_GREEN);
@@ -157,7 +160,7 @@ void gen_LAT_vects(){
             LATA_vect[FAS(t)] |= outputs[s].A_mask;
             LATB_vect[FAS(t)] |= outputs[s].B_mask;
             t++;
-            if (FAS(t) >= PERIOD) t = 0;
+            if (FAS(t) >= TMR_MAX) t = 0;
         }
     }
 }
@@ -178,14 +181,14 @@ void gen_LAT_vects(){
     int s;
     for(s = 0;s < N_SIGNALS;s++){
         unsigned char t = FAS(signal_array[s].up);//t = 61
-        if(t >= PERIOD) continue;//Transducer is off, continue
+        if(t >= TMR_MAX) continue;//Transducer is off, continue
         int i;
         for (i = 0;i < PERIOD/2;i++){
             LATA_vect[t] |= outputs[s].A_mask;
             LATB_vect[t] |= outputs[s].B_mask;
             LATC_vect[t] |= outputs[s].C_mask;
             t++;
-            if (t >= PERIOD) t = 0;
+            if (t >= TMR_MAX) t = 0;
         }
     }
 }
@@ -254,8 +257,8 @@ void initSlaveSPI(void)
     SPI1CONbits.CKE = 1;        // Output data changes on transition from idle to active
     SPI1CONbits.SSEN = 1;       // In slave mode
     
-    RPB13Rbits.RPB13R = 3;//RPB13 (pin 15) SPI MISO
-    SDI1Rbits.SDI1R   = 3;//RPB11 SPI MOSI. Also PGEC2
+    RPB13Rbits.RPB13R = 3;//RPB13 (pin 11) SPI MISO
+    SDI1Rbits.SDI1R   = 3;//RPB11 (pin 9) SPI MOSI. Also PGEC2
     SS1R              = 3;//RPB15 (pin 15) SPI SS
     TRISBSET = 0x8800;//11 and 15 inputs
     TRISBCLR = 0x2000;//13 output
@@ -301,6 +304,9 @@ void InitializeSystem(void)
     //ADC
     ANSELA = 0;
     ANSELB = 0;
+#ifdef MCU_SLAVE
+    ANSELC = 0;
+#endif
 #ifdef MCU_MASTER
     TRISASET = 3;
     ANSELA = 3;
@@ -349,6 +355,7 @@ void InitializeSystem(void)
     IEC0bits.T3IE = 1;// Enable interrupts from Timer 2
     
     T4CONbits.TON = 0;
+    TMR4 = 0;
 #ifdef MCU_MASTER
     T4CONbits.TCKPS = 1;// Pre-Scale timer 4 = 1:2 (10MHz)
     PR4 = 1000;
@@ -357,10 +364,9 @@ void InitializeSystem(void)
     IEC0bits.T4IE = 1;// Enable interrupts from Timer 2
 #else    
     T4CONbits.TCKPS = PRESCALE_TMR;
-    PR4 = PERIOD;
-#endif
-    TMR4 = 0;
+    PR4 = TMR_MAX;
     T4CONbits.TON = 1;
+#endif
     
     /* Set Interrupt Controller for multi-vector mode */
     INTCONSET = _INTCON_MVEC_MASK;

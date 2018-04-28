@@ -123,7 +123,7 @@ int set_single(int num, char val){
 #endif
 
 #ifdef MCU_MASTER
-//Starts or stops interrupts
+//Starts or stops SPI interrupts
 void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
 {
     if(!SPI1STATbits.SPIBUSY){
@@ -136,10 +136,11 @@ void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
             //Sync signal sent
             UNSEL_ALL_SLAVES;
             PIN_CLR(PIN_YELLOW);
+            T4CONbits.TON = 0;
         } else {
             IEC1bits.SPI1TXIE = 1;
+            T4CONbits.TON = 0;
         }
-        T4CONbits.TON = 0;
     }
     IFS0bits.T4IF = 0;
 }
@@ -209,7 +210,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
             SPI1BUF = 'y';
             spi_queue[0].slave_id = -1;//Transmission done after this
             IEC1bits.SPI1TXIE = 0;//Disable interrupts
-            T4CONbits.TON = 1;//Wait for SPIBUSY before deselecting slave
+            T4CONbits.ON = 1;//Wait for SPIBUSY before deselecting slave
         } else {
             SPI1BUF = next_SPI_tx_char();
         }
@@ -222,7 +223,6 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
 #ifdef MCU_MASTER
 void __ISR(_ADC_VECTOR, IPL2SOFT) ADC_Interrupt(void)
 {
-    PIN_SET(PIN_YELLOW);
     IFS0bits.AD1IF = 0;
 }
 #endif

@@ -23,7 +23,8 @@ extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD];
 #ifdef MCU_SLAVE
 #define N_SIGNALS 26
 #define PRESCALE_TMR 4
-#define PERIOD 62//Pbclk/40kHz/2^PRESCALE_TMR - 1=  1000/2^PRESCALE_TMR - 1
+#define PERIOD 62   //Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
+#define TMR_MAX 61  //PERIOD - 1
 struct signal {
     unsigned char up;
 };
