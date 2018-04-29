@@ -4,9 +4,8 @@ s = serial('COM3','BaudRate',116280,'DataBits',8,'StopBits',1,...
     'FlowControl','none','Terminator','','Timeout',1)
 fopen(s)
 %% Kör för att skicka faser lagrade i normPhases
-%all_vect = matlab_to_mcu_phase(intPhases,0);
-all_vect = [0*ones(1,130)];
-%all_vect(49) = 0;
+all_vect = matlab_to_mcu_phase(intPhases,0);
+% all_vect = matlab_to_mcu_phase(0*ones(1,122),0);
 fprintf(s,['a' all_vect]);
 out = 1;
 while(~isempty(out))
@@ -16,13 +15,10 @@ end
 for d = 59:121
     all_vect = 255*ones(1,122);
     fprintf('Slog på transducer %d\n',d);
-    run = 1;
-    while run
-        all_vect(d+1) = 0;
-        send_vect = matlab_to_mcu_phase(all_vect,0);%Kastar om ordning
+    all_vect(d+1) = 0;
+    send_vect = matlab_to_mcu_phase(all_vect,0);%Kastar om ordning
 %       send_vect(20) = 0; RA7 kort 0
-        fprintf(s,['a' send_vect]);
-    end
+    fprintf(s,['a' send_vect]);
     pause()
 end
 %%
