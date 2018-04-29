@@ -16,22 +16,12 @@ end
 for d = 59:121
     all_vect = 255*ones(1,122);
     fprintf('Slog på transducer %d\n',d);
-    phi = 0;
     run = 1;
     while run
-        all_vect(d+1) = phi;
+        all_vect(d+1) = 0;
         send_vect = matlab_to_mcu_phase(all_vect,0);%Kastar om ordning
-%         send_vect(20) = 0; RA7 kort 0
+%       send_vect(20) = 0; RA7 kort 0
         fprintf(s,['a' send_vect]);
- %       if(sum(send_vect == 0) ~= 1)
-%            fprintf('%d: Fel antal nollor (%d)\n',d,sum(send_vect == 0));
-%         end
-%         if(sum(send_vect == 1) ~= 8)
-%             fprintf('%d: Fel antal ettor (%d)\n',d,sum(send_vect == 1));
-%         end
-%         phi = phi + 10;
-%         if (phi > 249), phi = 0; end
-%         pause(0.1)
     end
     pause()
 end
