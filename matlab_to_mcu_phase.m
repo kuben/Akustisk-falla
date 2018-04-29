@@ -12,6 +12,7 @@ function mcu_phase = matlab_to_mcu_phase(phase_vector,radians)
     else
         pv = phase_vector;
     end
+    pv(pv == 10) = 11;
     
 %OBS Matlab 1-indexerat MCU 0-indexerat i tabell nedan
 % Matlab 1  2     3     4  5  6     7    UNDRE
@@ -27,10 +28,10 @@ function mcu_phase = matlab_to_mcu_phase(phase_vector,radians)
 % MCU    101-103 129-124 (123?) 93-100
 % Matlab 99-104 105 106 107 108 109 110 111 112-122
 % MCU    80-85  87  86  88  89  91  90  92  69-79
-mcu_phase = zeros(1,130);
-mcu_phase([52 45 48 50 48:-1:46]) = pv(1:7);
-mcu_phase([33 44:-1:34 33 32:-1:27 24:-1:14 13:-1:8]) = pv(8:43);
-mcu_phase([6  7  5:-1:1 26 25 61:-1:53]) = pv(44:61);
+mcu_phase = 1*ones(1,130);
+mcu_phase([52 51 50 49 48:-1:46]) = pv(1:7);
+mcu_phase([45 44:-1:34 33 32:-1:27 26 25 24:-1:14 13:-1:10 8 9]) = pv(8:45);
+mcu_phase([7:-1:1 61:-1:53]) = pv(46:61);
 mcu_phase([105 109:-1:106 111 110 112 123:-1:113]) = pv(62:80);
 mcu_phase([102:104 130:-1:125 124 94:101]) = pv(81:98);
 mcu_phase([81:86 88 87  89 90 92  91  93  70:80]) = pv(99:122);
