@@ -27,6 +27,125 @@ produktenTime = toc;
 
 save('produktenTest.mat','produktenTime','minLaplPhase','height');
 
+
+%% Optimization horisontal movement
+
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
+load('produktenTest.mat');
+
+xvec = -linspace(0,10e-2,200);
+
+horisontalPhase = zeros(length(xvec),122);
+horisontalVal = zeros(length(xvec),1);
+horisontalTime = zeros(length(xvec),1);
+
+horisontalPhase(1,:) = minLaplPhase;
+
+for i = 1:length(xvec)
+    tic
+    disp(i)
+    [horisontalPhase(i,:),horisontalVal(i)] = BFGS([xvec(i),0,0],horisontalPhase(max(1,i-1),:),false);
+    horisontalTime(i) = toc;
+    save('horisontalMovement.mat','horisontalTime','horisontalPhase','horisontalVal','height');
+end
+
+
+save('horisontalMovement.mat','horisontalTime','horisontalPhase','horisontalVal','height');
+
+
+%% Optimization vertical upwards movement
+
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
+load('produktenTest.mat');
+
+zvec = linspace(0,5e-2,200);
+
+upwardsPhase = zeros(length(zvec),122);
+upwardsVal = zeros(length(zvec),1);
+upwardsTime = zeros(length(zvec),1);
+
+upwardsPhase(1,:) = minLaplPhase;
+
+
+for i = 1:length(zvec)
+    tic
+    disp(i)
+    [upwardsPhase(i,:),upwardsVal(i)] = BFGS([0,0,zvec(i)],upwardsPhase(max(1,i-1),:),false);
+    upwardsTime(i) = toc;
+    save('upwardsMovement.mat','upwardsTime','upwardsPhase','upwardsVal','height');
+end
+
+
+
+
+%% Optimization vertical downwards movement
+
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
+load('produktenTest.mat');
+
+zvec = -linspace(0,5e-2,200);
+
+downwardsPhase = zeros(length(zvec),122);
+downwardsVal = zeros(length(zvec),1);
+downwardsTime = zeros(length(zvec),1);
+
+downwardsPhase(1,:) = minLaplPhase;
+
+for i = 1:length(zvec)
+    tic
+    disp(i)
+    [downwardsPhase(i,:),downwardsVal(i)] = BFGS([0,0,zvec(i)],downwardsPhase(max(1,i-1),:),false);
+    downwardsTime(i) = toc;
+    save('downwardsMovement.mat','downwardsTime','downwardsPhase','downwardsVal','height');
+end
+
+
+%% Inspect movement
+clc, clear, close all
+
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
+load('produktenTest.mat');
+load('horisontalMovement.mat')
+load('upwardsMovement.mat')
+load('downwardsMovement.mat')
+
+h1 = figure(1);
+plot((horisontalTime(1:200)))
+title('Time')
+hold on
+plot((upwardsTime(1:200)))
+plot((downwardsTime(1:200)))
+set(h1,'WindowStyle','docked')
+legend('Horisontal','Upwards','Downwards')
+
+
+h2 = figure(2);
+plot((horisontalVal(1:200)))
+title('Value of minus the laplacian')
+hold on
+plot((upwardsVal(1:200)))
+plot((downwardsVal(1:200)))
+set(h2,'WindowStyle','docked')
+legend('Horisontal','Upwards','Downwards','Location','NorthWest')
+
+
+for k=1:200 
+    meanHorisontalPhaseDifference(k) = mean(horisontalPhase(k,:))-mean(minLaplPhase);
+    meanUpwardsPhaseDifference(k) = mean(upwardsPhase(k,:))-mean(minLaplPhase);
+    meanDownwardsPhaseDifference(k) = mean(downwardsPhase(k,:))-mean(minLaplPhase);
+end
+
+h3 = figure(3);
+plot((meanHorisontalPhaseDifference(1:200)))
+title('Difference of mean phase')
+hold on
+plot((meanUpwardsPhaseDifference(1:200)))
+plot((meanDownwardsPhaseDifference(1:200)))
+set(h3,'WindowStyle','docked')
+legend('Horisontal','Upwards','Downwards')
+
+
+
 %% Visualisation of Produkten
 clf, clc
 latex_fonts
@@ -100,6 +219,18 @@ for i = 1:length(presFactor)
 end
 
 save('pressureWeightingFactor2.mat','weightPhases','weightTime','weightVal','presFactor')
+
+
+%% Weight inspection
+
+load('pressureWeightingFactor1.mat')
+%load('pressureWeightingFactor2.mat')
+
+for k=1:122, meanPhaseDifference(k) = mean(weightPhases(k,:))-mean(minLaplPhase); end
+plot(1:122,meanPhaseDifference)
+plot(weightVal)
+plot(weightTime)
+
 
 
 
