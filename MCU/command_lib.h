@@ -46,13 +46,17 @@ static volatile struct SPI_transmission spi_queue[SPI_QUEUE_LEN] = {{.slave_id =
 int shift_queue();
 char next_SPI_tx_char();
 int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data);
-#endif
-void restart_command_timeout();
-void clear_command_timeout();
-int set_single(int num, char val);
 
+int set_single(int num, char val);
 int command_set_all();
 int command_set_single();
 int command_read();
+#endif
+#ifdef MCU_PROTOTYP
+int command_set_period();
+int command_set_delay();
+#endif
+void restart_command_timeout();
+void clear_command_timeout();
 
 #endif

@@ -3,6 +3,13 @@
 s = serial('COM3','BaudRate',116280,'DataBits',8,'StopBits',1,...
     'FlowControl','none','Terminator','','Timeout',1)
 fopen(s)
+%% Ändra period
+%fprintf(s,['p' 63]);
+fprintf(s,['d' 30]);
+out = 1;
+while(~isempty(out))
+    out = fscanf(s)
+end
 %% Kör för att skicka faser lagrade i normPhases
 %in_phasees = 0*ones(1,122);
 in_phases = downwardsPhase;
@@ -10,7 +17,7 @@ for l = 1:1:size(in_phases,1)
     all_vect = matlab_to_mcu_phase(in_phases(l,:),1);
     fprintf(s,['a' all_vect]);
     out = fscanf(s) 
-    pause(0.5)
+    pause()
 end
 %% Kör för att en i taget slå på alla transducers
 for d = 59:121

@@ -8,7 +8,7 @@ function mcu_phase = matlab_to_mcu_phase(phase_vector,radians)
     assert(length(phase_vector) == 122,...
         'phase_vector måste innehålla 122 faser');
     if (radians)
-        pv = mod(phase_vector,2*pi) * 250/2/pi;
+        pv = floor(mod(phase_vector,2*pi) * 250/2/pi);
     else
         pv = phase_vector;
     end

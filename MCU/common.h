@@ -1,41 +1,37 @@
 #ifndef _COMMON_H    /* Guard against multiple inclusion */
 #define _COMMON_H
 
-//#define MCU_PROTOTYP
+#define MCU_PROTOTYP
 //#define MCU_SLAVE
-#define MCU_MASTER
+//#define MCU_MASTER
 
 #include <xc.h>
 
+#ifndef MCU_MASTER
+extern void gen_LAT_vects();
+#define PRESCALE_TMR 4
+#endif
+
 #ifdef MCU_PROTOTYP
 #define N_SIGNALS 4
-#define PERIOD 249
-struct signal {
-    unsigned char up;
-    unsigned char down;
-};
-#define SET_SIGNAL_DUR(signal,delay,dur) {signal.up = delay;\
-                                 signal.down = delay + dur;\
-                                 if(signal.down >= 250) signal.down -= 250;}
+#define PERIOD 75 //Allocate more than enough for 40kHz
 
 extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD];
+extern volatile unsigned char period;
+extern volatile unsigned char phase_shift;
+extern void init_LAT_vects();
 #endif
 #ifdef MCU_SLAVE
 #define N_SIGNALS 26
-#define PRESCALE_TMR 4
-#define PERIOD 62   //Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
-#define TMR_MAX 61  //PERIOD - 1
 struct signal {
     unsigned char up;
 };
 #define SET_SIGNAL(signal,delay) signal.up = delay
-extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD],LATC_vect[PERIOD];
-#endif
-#define FAS(t) t*PERIOD/250
-
-#ifndef MCU_MASTER
 extern volatile struct signal signal_array[N_SIGNALS];
-extern void gen_LAT_vects();
+#define PERIOD 62   //Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
+#define TMR_MAX 61  //PERIOD - 1
+#define FAS(t) t*PERIOD/250
+extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD],LATC_vect[PERIOD];
 #endif
 
 struct pin_struct {

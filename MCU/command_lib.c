@@ -107,13 +107,6 @@ void clear_command_timeout(){
     T2CONbits.TON = 0;
 }
 
-#ifdef MCU_PROTOTYP
-int set_single(int num, char val){
-    if (num >= N_SIGNALS) return 1;
-    SET_SIGNAL_DUR(signal_array[num],val,124);
-    return 0;
-}
-#endif
 #ifdef MCU_SLAVE
 int set_single(int num, char val){
     if (num >= N_SIGNALS) return 1;
@@ -249,22 +242,33 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
         command.comm[command.next_idx] = rx;
         if (command.next_idx == 0) {
             switch(rx) {
+#ifdef MCU_MASTER
                 case 'a'://All
                 case 's'://Single
                     command.next_idx++;
                     restart_command_timeout();
                     break;
-#ifdef MCU_MASTER
                 case 'r'://Read amperage and voltage
                     command_read();
                     break;
+#else
+                case 'p'://Period
+                case 'd'://Delay
+                    command.next_idx++;
+                    restart_command_timeout();
+                    break;                    
 #endif
                 default:
                     transmit("%c not a command",rx);
             }
         } else {
+#ifdef MCU_MASTER
             if (command_set_all()
                     && command_set_single()
+#else                
+            if (command_set_period()
+                    && command_set_delay()
+#endif
                     ){//None of the commands
                 command.next_idx++;
                 restart_command_timeout();            
@@ -281,17 +285,8 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
  }
 #endif
 
-#ifndef MCU_SLAVE
+#ifndef MCU_PROTOTYP
 int command_set_all() {
-#ifdef MCU_PROTOTYP
-    if((command.comm[0] != 'a') || (command.next_idx =! N_SIGNALS)) return 1;
-    int i, failed = 0;
-    for (i = 1;i <= N_SIGNALS; i++){
-        failed += set_single(i-1,command.comm[i]);                
-    }
-    if (failed) transmit("%c: Failed %d times",command.comm[0], failed);
-    else transmit("%c: Success.",command.comm[0]);
-#else
     if((command.comm[0] != 'a') || (command.next_idx != 130)) return 1;
     int i,id = 0;
     for(i = 1;i < 130; i += 26){
@@ -303,18 +298,9 @@ int command_set_all() {
     }
     if (id == 5) transmit("%c: Sent phases to id 0 through 4",command.comm[0]);
     return 0;
-#endif
 }
 
 int command_set_single() {
-#ifdef MCU_PROTOTYP
-    if ((command.comm[0] != 's') || (command.next_idx != 2)) return 1;
-    //Single - comm[1] is transducer no., comm[2] is value of delay
-    if (set_single(command.comm[1],command.comm[2]))
-        transmit("%c: Failed. %u OOB",command.comm[0],command.comm[1]);
-    else
-        transmit("%c: Success. Set %d to %u",command.comm[0],command.comm[1],command.comm[2]);
-#else
     if ((command.comm[0] != 's') || (command.next_idx != 2)) return 1;
     int t = command.comm[1];
     if (t >= 130){
@@ -326,29 +312,9 @@ int command_set_single() {
     if(queue_SPI_tx(id, 's', data)){//Failed
         transmit("%c: Failed sending phase %i to id %i, que full.", command.comm[0], command.comm[2], id);
     } else transmit("%c: Sent phase %i to id %i", command.comm[0], command.comm[2], id);
-#endif
     return 0;
 }
 
-#ifdef MCU_PROTOTYP
-int command_set_period() {
-    if ((command.comm[0] != 'p') || (command.next_idx != 1)) return 1;
-    set_period(command.comm[1]);
-    transmit("%c: Success. Set period to %u",command.comm[0],command.comm[1]);
-    return 0;
-}
-
-int command_set_delay() {
-    if ((command.comm[0] != 'd') || (command.next_idx != 5)) return 1;
-    SET_SIGNAL_DUR(signal_array[0],command.comm[1],command.comm[2]);
-    SET_SIGNAL_DUR(signal_array[2],command.comm[1],command.comm[2]);
-    SET_SIGNAL_DUR(signal_array[1],command.comm[3],command.comm[4]);
-    SET_SIGNAL_DUR(signal_array[3],command.comm[3],command.comm[4]);
-    transmit("%c: Success. Up: %u Dur: %u, Up: %u Dur: %u",
-            command.comm[0],command.comm[1],command.comm[2],command.comm[3],command.comm[4]);
-    return 0;
-}
-#else
 int command_read(){
     AD1CHSbits.CH0SA = 0;//Sample CH0 - V+
     AD1CON1bits.ON = 1;
@@ -380,5 +346,27 @@ int command_read(){
     return 0;//No arguments
 }
 #endif
+#ifdef MCU_PROTOTYP
+int command_set_period() {
+    if ((command.comm[0] != 'p') || (command.next_idx != 1)) return 1;
+    period = command.comm[1];
+    T4CONbits.ON = 0;
+    PR4 = period-1;
+    init_LAT_vects();
+    gen_LAT_vects();
+    TMR4 = 0;
+    T4CONbits.ON = 1;
+    transmit("%c: Success. Set period to %u",command.comm[0],command.comm[1]);
+    return 0;
+}
 
+int command_set_delay() {
+    if ((command.comm[0] != 'd') || (command.next_idx != 1)) return 1;
+    phase_shift = command.comm[1];
+    gen_LAT_vects();
+    transmit("%c: Success delay set to %u",
+            command.comm[0],command.comm[1]);
+    return 0;
+}
+#else
 #endif

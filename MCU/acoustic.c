@@ -1,6 +1,6 @@
-//#define PRAGMA_PROTOTYP
+#define PRAGMA_PROTOTYP
 //#define PRAGMA_SLAVE
-#define PRAGMA_MASTER
+//#define PRAGMA_MASTER
 
 #pragma config PMDL1WAY = OFF            // Peripheral Module Disable Configuration (Allow only one reconfiguration)
 #pragma config IOL1WAY = OFF             // Peripheral Pin Select Configuration (Allow only one reconfiguration)
@@ -25,7 +25,7 @@
 #else
 #pragma config OSCIOFNC = OFF
 #endif
-#ifdef PRAGMA_SLAVE
+#ifndef PRAGMA_MASTER
 #pragma config FPBDIV = DIV_1           // Peripheral Clock Divisor (Pb_Clk is Sys_Clk = 40MHz)
 #else
 #pragma config FPBDIV = DIV_2           // Peripheral Clock Divisor (Pb_Clk is Sys_Clk/2 = 20MHz)
@@ -52,12 +52,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef MCU_MASTER
-volatile struct signal signal_array[N_SIGNALS] = {0};
-#endif
-
 void InitializeSystem(void);
 #ifdef MCU_SLAVE
+volatile struct signal signal_array[N_SIGNALS] = {0};
 void initSlaveSPI(void);
 #else
 void initUART(void);
@@ -69,6 +66,8 @@ void initMasterSPI();
 #ifndef MCU_MASTER
 void init_signals();
 volatile uint32_t LATA_vect[PERIOD] = {}, LATB_vect[PERIOD] = {};
+volatile unsigned char period = 62;
+volatile unsigned char phase_shift = 0;
 #ifdef MCU_SLAVE
 volatile uint32_t LATC_vect[PERIOD] = {};
 #endif
@@ -119,6 +118,9 @@ int main(int argc, char** argv) {
     
 #ifndef MCU_MASTER
     init_signals();
+#ifdef MCU_PROTOTYP
+    init_LAT_vects();
+#endif
     gen_LAT_vects();
 #endif
    
@@ -150,18 +152,40 @@ int main(int argc, char** argv) {
 }
 
 #ifdef MCU_PROTOTYP
-void gen_LAT_vects(){
-    memset(LATA_vect,0,sizeof(uint32_t)*PERIOD);
-    memset(LATB_vect,0,sizeof(uint32_t)*PERIOD);
-    char s;
-    for(s = 0;s < N_SIGNALS;s++){
-        unsigned char t = FAS(signal_array[s].up);
-        while (t != FAS(signal_array[s].down)){
-            LATA_vect[FAS(t)] |= outputs[s].A_mask;
-            LATB_vect[FAS(t)] |= outputs[s].B_mask;
-            t++;
-            if (FAS(t) >= TMR_MAX) t = 0;
-        }
+void init_LAT_vects(){//Run when changing period
+    int t;
+    for (t = 0;t < period/2;t++){//Signal is up, complement is down
+        LATA_vect[t] |= outputs[0].A_mask;//Set
+        LATB_vect[t] |= outputs[0].B_mask;
+        LATA_vect[t] &= ~outputs[1].A_mask;//Clr
+        LATB_vect[t] &= ~outputs[1].B_mask;
+    }
+    for (;t < period;t++){//Signal is down, complement is up
+        LATA_vect[t] &= ~outputs[0].A_mask;//Clr
+        LATB_vect[t] &= ~outputs[0].B_mask;
+        LATA_vect[t] |= outputs[1].A_mask;//Set
+        LATB_vect[t] |= outputs[1].B_mask;
+    }
+}
+void gen_LAT_vects(){//Run when changing phase_shift
+    //No need to memset LAT_vects
+    unsigned char t = phase_shift;//The phase shift of the second signal
+    int i;
+    for (i = 0;i < period/2;i++){//Signal is up, complement is down
+        LATA_vect[t] |= outputs[2].A_mask;//Set
+        LATB_vect[t] |= outputs[2].B_mask;
+        LATA_vect[t] &= ~outputs[3].A_mask;//Clr
+        LATB_vect[t] &= ~outputs[3].B_mask;
+        t++;
+        if (t >= period) t = 0;
+    }
+    for (;i < period;i++){//Signal is down, complement is up
+        LATA_vect[t] &= ~outputs[2].A_mask;//Clr
+        LATB_vect[t] &= ~outputs[2].B_mask;
+        LATA_vect[t] |= outputs[3].A_mask;//Set
+        LATB_vect[t] |= outputs[3].B_mask;
+        t++;
+        if (t >= period) t = 0;
     }
 }
 #endif
@@ -188,7 +212,7 @@ void gen_LAT_vects(){
             LATB_vect[t] |= outputs[s].B_mask;
             LATC_vect[t] |= outputs[s].C_mask;
             t++;
-            if (t >= TMR_MAX) t = 0;
+            if (t >= PERIOD) t = 0;
         }
     }
 }
@@ -207,10 +231,6 @@ void init_signals(){
     PIN_CONF_OUTPUT(outputs[1]);
     PIN_CONF_OUTPUT(outputs[2]);
     PIN_CONF_OUTPUT(outputs[3]);
-    SET_SIGNAL_DUR(signal_array[0],0,124);
-    SET_SIGNAL_DUR(signal_array[1],124,124);
-    SET_SIGNAL_DUR(signal_array[2],0,124);
-    SET_SIGNAL_DUR(signal_array[3],124,124);
 #endif
 }
 
@@ -219,7 +239,7 @@ void initUART() {
     U1MODEbits.ON = 0;
     U1MODEbits.BRGH = 1;//Baud rate 116280
     //U1STAbits.UTXISEL = 0b10;//Interrupt when TX empty
-    U1BRG = 42;
+    U1BRG = 84;
     
     TRISBSET = 0xa000;//RB13 and 15 inputs
     U1RXRbits.U1RXR = 0b0011;//RB13 (pin 24)   U1RX
@@ -364,7 +384,11 @@ void InitializeSystem(void)
     IEC0bits.T4IE = 1;// Enable interrupts from Timer 2
 #else    
     T4CONbits.TCKPS = PRESCALE_TMR;
+#ifdef MCU_SLAVE
     PR4 = TMR_MAX;
+#else
+    PR4 = period-1;
+#endif
     T4CONbits.TON = 1;
 #endif
     
