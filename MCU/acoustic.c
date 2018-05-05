@@ -65,7 +65,10 @@ void initMasterSPI();
 
 #ifndef MCU_MASTER
 void init_signals();
-volatile uint32_t LATA_vect[PERIOD] = {}, LATB_vect[PERIOD] = {};
+volatile LATA_t LATA_cache[CACHE_SIZE][PERIOD] = {};
+volatile LATB_t LATB_cache[CACHE_SIZE][PERIOD] = {};
+LATA_t *volatile LATA_vect = LATA_cache[0];
+LATB_t *volatile LATB_vect = LATB_cache[0];
 volatile unsigned char phase_shift = 0;
 #ifdef MCU_SLAVE
 volatile uint32_t LATC_vect[PERIOD] = {};
@@ -100,7 +103,6 @@ int main(int argc, char** argv) {
     initSlaveSPI();
 #else
     initUART();
-    transmit("Hello World");
 #ifdef MCU_MASTER
     initMasterSPI();
     
@@ -132,8 +134,9 @@ int main(int argc, char** argv) {
         LATC = LATC_vect[tmr];
 #endif
 #ifdef MCU_PROTOTYP
-        LATA = LATA_vect[TMR4];
-        LATB = LATB_vect[TMR4];
+        int tmr = TMR4;
+        LATA = LATA_vect[tmr];
+        LATB = LATB_vect[tmr];
 #endif
 #ifdef MCU_MASTER
         i++;
@@ -151,24 +154,27 @@ int main(int argc, char** argv) {
 }
 
 #ifdef MCU_PROTOTYP
-void init_LAT_vects(){//Run when changing period
-    int t;
-    for (t = 0;t < PERIOD/2;t++){//Signal is up, complement is down
-        LATA_vect[t] |= outputs[0].A_mask;//Set
-        LATB_vect[t] |= outputs[0].B_mask;
-        LATA_vect[t] &= ~outputs[1].A_mask;//Clr
-        LATB_vect[t] &= ~outputs[1].B_mask;
-    }
-    for (;t < PERIOD;t++){//Signal is down, complement is up
-        LATA_vect[t] &= ~outputs[0].A_mask;//Clr
-        LATB_vect[t] &= ~outputs[0].B_mask;
-        LATA_vect[t] |= outputs[1].A_mask;//Set
-        LATB_vect[t] |= outputs[1].B_mask;
+void init_LAT_vects(){//Run only at startup
+    int i;
+    for (i = 0;i < CACHE_SIZE;i++){
+        int t;
+        for (t = 0;t < PERIOD/2;t++){//Signal is up, complement is down
+            LATA_cache[i][t] |= outputs[0].A_mask;//Set
+            LATB_cache[i][t] |= outputs[0].B_mask;
+            LATA_cache[i][t] &= ~outputs[1].A_mask;//Clr
+            LATB_cache[i][t] &= ~outputs[1].B_mask;
+        }
+        for (;t < PERIOD;t++){//Signal is down, complement is up
+            LATA_cache[i][t] &= ~outputs[0].A_mask;//Clr
+            LATB_cache[i][t] &= ~outputs[0].B_mask;
+            LATA_cache[i][t] |= outputs[1].A_mask;//Set
+            LATB_cache[i][t] |= outputs[1].B_mask;
+        }
     }
 }
 void gen_LAT_vects(){//Run when changing phase_shift
     //No need to memset LAT_vects
-    int t = phase_shift;//The phase shift of the second signal
+    int t = FAS(phase_shift);//The phase shift of the second signal
     int i;
     for (i = 0;i < PERIOD/2;i++){//Signal is up, complement is down
         LATA_vect[t] |= outputs[2].A_mask;//Set
@@ -247,7 +253,7 @@ void initUART() {
     IFS1bits.U1TXIF = 0;   //Clear flags
     IFS1bits.U1RXIF = 0;
     IFS1bits.U1EIF = 0;
-    IPC8bits.U1IP = 0b010; //Set priority 2
+    IPC8bits.U1IP = 2; //Set priority 3
     IPC8bits.U1IS = 0;
     IEC1bits.U1EIE = 1;
     IEC1bits.U1RXIE = 1;
@@ -345,7 +351,7 @@ void InitializeSystem(void)
 
     /* Initialize Timer 2 Interrupt Controller Settings */
     
-    IPC3bits.T3IP = 1;// Set the interrupt priority to 1
+    IPC3bits.T3IP = 2;// Set the interrupt priority to 2
     IFS0bits.T3IF = 0;// Reset the Timer 2 interrupt flag
     IEC0bits.T3IE = 1;// Enable interrupts from Timer 2
     
@@ -361,6 +367,11 @@ void InitializeSystem(void)
     T4CONbits.TCKPS = PRESCALE_TMR;
     PR4 = TMR_MAX;
     T4CONbits.TON = 1;
+    
+    T5CONbits.TON = 0;//TMR5 is sequence timer
+    IPC5bits.T5IP = 1;
+    IFS0bits.T5IF = 0;
+    IEC0bits.T5IE = 1;
 #endif
     
     /* Set Interrupt Controller for multi-vector mode */

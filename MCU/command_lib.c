@@ -97,7 +97,14 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
     return 0;
 }
 #endif
-
+void increment_LAT_vects(){
+    LATA_vect += PERIOD;//Point to next vector
+    LATB_vect += PERIOD;
+    if(LATA_vect >= LATA_cache[CACHE_SIZE]){//If pointing beyond cache vector
+        LATA_vect = LATA_cache[0];
+        LATB_vect = LATB_cache[0];
+    }
+}
 void restart_command_timeout(){
     TMR2 = 0;    // Clear counter
     T2CONbits.TON = 1;
@@ -105,6 +112,10 @@ void restart_command_timeout(){
 
 void clear_command_timeout(){
     T2CONbits.TON = 0;
+}
+
+void stop_sequence(){
+    T5CONbits.ON = 0;
 }
 
 #ifdef MCU_SLAVE
@@ -151,6 +162,26 @@ void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
 	IFS0bits.T3IF = 0;//Reset interrupt flag
 }
 
+void __ISR (_TIMER_5_VECTOR, IPL1SOFT) Sequence_Timer_Interrupt(void)
+{
+    //First determine if we are at the end of a sequence
+    if(LATA_vect == sequence.LATA_seq_end){
+        //If pointing to the last vect in sequence and n == 1 then end the sequence
+        if (sequence.n == 1){
+            stop_sequence();
+        } else if (sequence.n > 1){//If not zero then decrement remaining repetitions
+            sequence.n--;
+            LATA_vect = sequence.LATA_seq_begin;//Go to first vector
+            LATB_vect = sequence.LATB_seq_begin;
+        } else {
+            LATA_vect = sequence.LATA_seq_begin;//Go to first vector
+            LATB_vect = sequence.LATB_seq_begin;   
+        }
+    } else {
+        increment_LAT_vects();//Point to next LAT_vect
+    }
+	IFS0bits.T5IF = 0;//Reset interrupt flag
+}
 #ifndef MCU_PROTOTYP
 void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void) 
 {
@@ -213,13 +244,6 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
  }
 #endif
 
-#ifdef MCU_MASTER
-void __ISR(_ADC_VECTOR, IPL2SOFT) ADC_Interrupt(void)
-{
-    IFS0bits.AD1IF = 0;
-}
-#endif
-
 #ifndef MCU_SLAVE
 void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void) 
 { 
@@ -252,8 +276,9 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
                     command_read();
                     break;
 #else
-                case 'p'://Period
                 case 'd'://Delay
+                case 'l'://Load sequence
+                case 'i'://Init sequence
                     command.next_idx++;
                     restart_command_timeout();
                     break;                    
@@ -267,6 +292,8 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
                     && command_set_single()
 #else                
             if (command_set_delay()
+                    && command_load_sequence()
+                    && command_init_sequence()
 #endif
                     ){//None of the commands
                 command.next_idx++;
@@ -313,37 +340,6 @@ int command_set_single() {
     } else transmit("%c: Sent phase %i to id %i", command.comm[0], command.comm[2], id);
     return 0;
 }
-
-int command_read(){
-    AD1CHSbits.CH0SA = 0;//Sample CH0 - V+
-    AD1CON1bits.ON = 1;
-    AD1CON1CLR = 2;
-    transmit("testing1"); return 0;
-    volatile int i;
-    for(i = 0;i < 40;i++){}//Wait 2us after turning on ADC
-    //AD1CON1CLR = 2;//Start sampling
-    
-    transmit("testing5"); return 0;
-    while(!AD1CON1bits.DONE){}
-    AD1CON1bits.DONE = 0;
-    uint32_t read_adc = ADC1BUF0;
-    float v_plus = 3.3*101*read_adc/1024;
-    AD1CON1bits.ON = 0;
-    /*
-    AD1CHSbits.CH0SA = 1;//Sample CH1 - current
-    AD1CON1bits.ON = 1;
-    for(i = 0;i < 40;i++){}//Wait 2us after turning on ADC
-    AD1CON1bits.SAMP = 1;//Start sampling
-    while(!AD1CON1bits.DONE){}
-    AD1CON1bits.DONE = 0;
-    read_adc = ADC1BUF0;
-    float current = 3.3*10*read_adc/1024;
-    AD1CON1bits.ON = 0;*/
-    
-    transmit("%c: Power voltage V+ is %.1fV.\nCurrent drain is %.2fA"
-            ,v_plus);//,current);
-    return 0;//No arguments
-}
 #endif
 #ifdef MCU_PROTOTYP
 int command_set_delay() {
@@ -354,5 +350,72 @@ int command_set_delay() {
             command.comm[0],command.comm[1]);
     return 0;
 }
-#else
+
+/*
+ * Arguments are:
+ * times - how many times to play the sequence. 0 for inifinity
+ * TMR_prescaler
+ * TMR_count
+*/
+int command_init_sequence() {
+    if ((command.comm[0] != 'i') || (command.next_idx != 3)) return 1;
+    stop_sequence();//Abort ongoing sequence
+    int n = command.comm[1];
+    sequence.n = n;
+    T5CONbits.TCKPS = command.comm[2];//Set up timer (let timer handle turning off itself)
+    PR5 = 10*command.comm[3];
+    TMR5 = 0;
+    LATA_vect = sequence.LATA_seq_begin;//Go to first vector
+    LATB_vect = sequence.LATB_seq_begin;
+    T5CONbits.ON = 1;//Start timer
+    if (n) transmit("%c: Success! Initiated sequence (%u times)", command.comm[0],n);
+    else transmit("%c: Success! Initiated sequence loop", command.comm[0]);
+    return 0;
+}
+/*
+ * Arguments are:
+ * n - number of steps
+ * ... - sequence steps
+*/
+int command_load_sequence() {
+    if (command.comm[0] != 'l') return 1;
+    int n = command.comm[1];
+    if (n > CACHE_SIZE) {
+        transmit("%c: Failed! Number of arguments %u is too high (max %u)",
+            command.comm[0],command.comm[1],CACHE_SIZE);
+        return 0;//Command is done
+    }
+    if(command.next_idx != n+1) return 1;//Command not yet done, #of arguments is n+1
+    
+    stop_sequence();//Abort ongoing sequence
+    LATA_t *old_LATA = LATA_vect;//Save the current address so we can restore it later
+    LATB_t *old_LATB = LATB_vect;
+    unsigned char old_phase_shift = phase_shift;
+    increment_LAT_vects();
+    sequence.LATA_seq_begin = LATA_vect;
+    sequence.LATB_seq_begin = LATB_vect;
+    phase_shift = command.comm[2];
+    gen_LAT_vects();
+    int i = 3;
+    while(i <= n+1){//Generate the n next vectors (load sequence)
+        increment_LAT_vects();
+        phase_shift = command.comm[i];
+        gen_LAT_vects();
+        i++;
+    }
+    sequence.LATA_seq_end = LATA_vect;//Save begin and end address
+    LATA_vect = old_LATA;//Restore old vector
+    LATB_vect = old_LATB;
+    phase_shift = old_phase_shift;
+    /*for (i = 0;i < CACHE_SIZE;i++){
+    int t;
+        for (t = 0;t < PERIOD;t++){
+            LATA = LATA_cache[i][t];
+            LATB = LATB_cache[i][t];
+        }
+    }*/
+    transmit("%c: Success! Loaded sequence of %u phases",
+            command.comm[0],command.comm[1]);
+    return 0;
+}
 #endif

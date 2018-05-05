@@ -17,8 +17,15 @@ extern void gen_LAT_vects();
 
 #ifdef MCU_PROTOTYP
 #define N_SIGNALS 4
+#define CACHE_SIZE 60
 
-extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD];
+typedef uint32_t LATA_t;
+typedef uint32_t LATB_t;
+
+extern volatile LATA_t LATA_cache[CACHE_SIZE][PERIOD];
+extern volatile LATB_t LATB_cache[CACHE_SIZE][PERIOD];
+extern LATA_t *volatile LATA_vect;
+extern LATB_t *volatile LATB_vect;
 extern volatile unsigned char phase_shift;
 extern void init_LAT_vects();
 #endif
@@ -53,10 +60,10 @@ struct pin_struct {
 #define PIN_GET(pin) ((PORTA & (pin).A_mask) || (PORTB & (pin).B_mask) || (PORTC & (pin).C_mask))
 #define PIN_TOGGLE(pin) {LATAINV = (pin).A_mask; LATBINV = (pin).B_mask; LATCINV = (pin).C_mask;}
 #endif
-#define PIN_A_STRUCT(i) (struct pin_struct) { .A_mask = 1<<i}
-#define PIN_B_STRUCT(i) (struct pin_struct) { .B_mask = 1<<i}
+#define PIN_A_STRUCT(i) ((struct pin_struct) { .A_mask = 1<<i})
+#define PIN_B_STRUCT(i) ((struct pin_struct) { .B_mask = 1<<i})
 #ifdef MCU_SLAVE
-#define PIN_C_STRUCT(i) (struct pin_struct) { .C_mask = 1<<i}
+#define PIN_C_STRUCT(i) ((struct pin_struct) { .C_mask = 1<<i})
 #endif
 
 

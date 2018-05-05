@@ -7,7 +7,7 @@ struct Command {
 #ifdef MCU_MASTER
     unsigned char comm[140];
 #else
-    unsigned char comm[30];
+    unsigned char comm[2+CACHE_SIZE];//This is the maximum amount needed
 #endif
     int next_idx;//If next_idx == 0 then new command
 };
@@ -26,6 +26,16 @@ static volatile struct Tx_buffer tx_buffer = {.pos = -1};
 
 char next_tx_char();
 int transmit(char *new_status, ...);
+#endif
+
+#ifdef MCU_PROTOTYP
+struct Sequence {
+    LATA_t *LATA_seq_begin, *LATA_seq_end;//First and lasts vectors in sequence
+    LATB_t *LATB_seq_begin;
+    int n;//Number of times sequence is to be played
+};
+
+static volatile struct Sequence sequence = {};
 #endif
 
 #ifdef MCU_MASTER
@@ -50,10 +60,12 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data);
 int set_single(int num, char val);
 int command_set_all();
 int command_set_single();
-int command_read();
 #endif
 #ifdef MCU_PROTOTYP
 int command_set_delay();
+int command_load_sequence();
+int command_init_sequence();
+void increment_LAT_vects();
 #endif
 void restart_command_timeout();
 void clear_command_timeout();

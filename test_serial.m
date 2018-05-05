@@ -3,12 +3,30 @@
 s = serial('COM3','BaudRate',116280,'DataBits',8,'StopBits',1,...
     'FlowControl','none','Terminator','','Timeout',1)
 fopen(s)
-%% Ändra period
-%fprintf(s,['p' 63]);
-fprintf(s,['d' 30]);
-out = 1;
-while(~isempty(out))
-    out = fscanf(s)
+%%
+fprintf(s,['d' 0]);
+out = fscanf(s)
+%%
+ph = floor(linspace(0,250,30));
+ph = [ph flip(ph)];
+fprintf(s,['l' length(ph) ph]);
+out = fscanf(s)
+%%
+tmr_prescale = 7;
+tmr_count = 100;
+%fprintf('Borde switcha i %.0fHz\n',40e6/(2^(tmr_prescale+1))/tmr_count)
+fprintf(s,['i' 1 tmr_prescale tmr_count]);
+out = fscanf(s)
+%% Ändra periodfor d = 59:121
+for d = [repmat([0:9 11:61],1,3) flip(repmat([0:9 11:61],1,3))]%
+% fprintf('d = %d\n',d);
+%fprintf(s,['p' d]);
+fprintf(s,['d' d]);
+% out = 1;
+% while(~isempty(out))
+%     out = fscanf(s)
+% end
+pause(0.0004)
 end
 %% Kör för att skicka faser lagrade i normPhases
 %in_phasees = 0*ones(1,122);
