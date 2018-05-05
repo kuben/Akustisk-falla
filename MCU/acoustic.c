@@ -1,5 +1,5 @@
-#define PRAGMA_PROTOTYP
-//#define PRAGMA_SLAVE
+//#define PRAGMA_PROTOTYP
+#define PRAGMA_SLAVE
 //#define PRAGMA_MASTER
 
 #pragma config PMDL1WAY = OFF            // Peripheral Module Disable Configuration (Allow only one reconfiguration)
@@ -65,11 +65,15 @@ void initMasterSPI();
 
 #ifndef MCU_MASTER
 void init_signals();
-volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD] = {};
-LAT_t *volatile LATB_vect = LATB_cache[0];
 volatile unsigned char phase_shift = 0;
-#ifdef MCU_SLAVE
-volatile uint32_t LATC_vect[PERIOD] = {};
+#ifdef MCU_PROTOTYP
+volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD] = {};
+volatile *volatile LATB_vect = LATB_cache[0];
+#else
+volatile LAT_t LATA_cache[CACHE_SIZE][PERIOD] = {},
+        LATB_cache[CACHE_SIZE][PERIOD] = {}, LATC_cache[CACHE_SIZE][PERIOD] = {};
+volatile LAT_t *volatile LATA_vect = LATA_cache[0],
+        *volatile LATB_vect = LATB_cache[0], *volatile LATC_vect = LATC_cache[0];
 #endif
 
 //Setup outputs
@@ -126,7 +130,7 @@ int main(int argc, char** argv) {
     //Run
     while(1) {
 #ifdef MCU_SLAVE
-        uint32_t tmr = TMR4;//32bit saves us one asm instruction (zeroing out initial bits)
+        int tmr = TMR4;//32bit int saves us one asm instruction (zeroing out initial bits)
         LATA = LATA_vect[tmr];
         LATB = LATB_vect[tmr];
         LATC = LATC_vect[tmr];
@@ -136,9 +140,6 @@ int main(int argc, char** argv) {
 #endif
 #ifdef MCU_MASTER
         i++;
-        //if(spi_queue[0].slave_id == -2){
-        //    PIN_SET(PIN_RED);
-        //} else PIN_CLR(PIN_RED);
         if(i == 1000000){
             i = 0;
             PIN_TOGGLE(PIN_GREEN);
@@ -192,20 +193,20 @@ void memset_volatile(volatile void *s, char c, size_t n)
 }
 void gen_LAT_vects(){
     //400 us with PERIOD 62
-    memset_volatile(LATA_vect,0,sizeof(uint32_t)*PERIOD);
-    memset_volatile(LATB_vect,0,sizeof(uint32_t)*PERIOD);
-    memset_volatile(LATC_vect,0,sizeof(uint32_t)*PERIOD);
+    memset_volatile(LATA_vect,0,sizeof(LAT_t)*PERIOD);
+    memset_volatile(LATB_vect,0,sizeof(LAT_t)*PERIOD);
+    memset_volatile(LATC_vect,0,sizeof(LAT_t)*PERIOD);
     int s;
     for(s = 0;s < N_SIGNALS;s++){
-        unsigned char t = FAS(signal_array[s].up);//t = 61
-        if(t >= TMR_MAX) continue;//Transducer is off, continue
+        unsigned char t = FAS(signal_array[s].up);
+        if(t > TMR_MAX) continue;//Transducer is off, continue
         int i;
         for (i = 0;i < PERIOD/2;i++){
             LATA_vect[t] |= outputs[s].A_mask;
             LATB_vect[t] |= outputs[s].B_mask;
             LATC_vect[t] |= outputs[s].C_mask;
             t++;
-            if (t >= PERIOD) t = 0;
+            if (t > TMR_MAX) t = 0;
         }
     }
 }
@@ -314,7 +315,6 @@ void InitializeSystem(void)
 {
     BMXCONbits.BMXWSDRM = 0;
     
-    //ADC
     ANSELA = 0;
     ANSELB = 0;
 #ifdef MCU_SLAVE
@@ -324,25 +324,20 @@ void InitializeSystem(void)
     /* Let Timer 2 (in 32-bit mode) be command time-out timer 
      * Timer 4 be 40kHz-timer
      */
-    // Turn off the timer
-    T2CONbits.TON = 0;
+    
+    T2CONbits.TON = 0;// Turn off the timer
     T3CONbits.TON = 0;
     T2CONbits.TCKPS = 7;// Pre-Scale timer 2 = 1:256 (T2Clk: 20MHz / 256 = 78.125kHz)
     T2CONbits.T32 = 1;
-       
-    TMR2 = 0;
-    TMR3 = 0;
-    
-    // Set T2 period ~ 5s
-    uint32_t one_second = 78125;
-    PR2 = one_second/2;
-
-    /* Initialize Timer 2 Interrupt Controller Settings */
-    
     IPC3bits.T3IP = 2;// Set the interrupt priority to 2
     IFS0bits.T3IF = 0;// Reset the Timer 2 interrupt flag
     IEC0bits.T3IE = 1;// Enable interrupts from Timer 2
-    
+       
+    TMR2 = 0;
+    TMR3 = 0;
+    uint32_t one_second = 78125;
+    PR2 = one_second/2;
+
     T4CONbits.TON = 0;
     TMR4 = 0;
 #ifdef MCU_MASTER
@@ -351,7 +346,7 @@ void InitializeSystem(void)
     IPC4bits.T4IP = 1;// Set the interrupt priority to 1
     IFS0bits.T4IF = 0;// Reset the Timer 2 interrupt flag
     IEC0bits.T4IE = 1;// Enable interrupts from Timer 2
-#else    
+#else
     T4CONbits.TCKPS = PRESCALE_TMR;
     PR4 = TMR_MAX;
     T4CONbits.TON = 1;

@@ -96,13 +96,39 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
     T4CONbits.TON = 1;//Let timer start transmission if not busy
     return 0;
 }
+#else
+void stop_sequence(){
+    T5CONbits.ON = 0;
+}
 #endif
+#ifdef MCU_PROTOTYP
 void increment_LAT_vects(){
     LATB_vect += PERIOD;//Point to next vector
     if(LATB_vect >= LATB_cache[CACHE_SIZE]){//If pointing beyond cache vector
         LATB_vect = LATB_cache[0];
     }
 }
+#endif
+#ifdef MCU_SLAVE
+void increment_LAT_vects(){
+    LATA_vect += PERIOD;//Point to next vector
+    LATB_vect += PERIOD;
+    LATC_vect += PERIOD;
+    if(LATB_vect >= LATB_cache[CACHE_SIZE]){//If pointing beyond cache vector
+        LATA_vect = LATA_cache[0];
+        LATB_vect = LATB_cache[0];
+        LATC_vect = LATC_cache[0];
+    }
+}
+
+void begin_LAT_vects_sequence(){
+    LATB_vect = sequence.LATB_seq_begin;//Go to first vector
+#ifdef MCU_SLAVE
+    LATA_vect = sequence.LATA_seq_begin;
+    LATC_vect = sequence.LATC_seq_begin;
+#endif
+}
+#endif
 void restart_command_timeout(){
     TMR2 = 0;    // Clear counter
     T2CONbits.TON = 1;
@@ -110,10 +136,6 @@ void restart_command_timeout(){
 
 void clear_command_timeout(){
     T2CONbits.TON = 0;
-}
-
-void stop_sequence(){
-    T5CONbits.ON = 0;
 }
 
 #ifdef MCU_SLAVE
@@ -160,6 +182,7 @@ void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
 	IFS0bits.T3IF = 0;//Reset interrupt flag
 }
 
+#ifndef MCU_MASTER
 void __ISR (_TIMER_5_VECTOR, IPL1SOFT) Sequence_Timer_Interrupt(void)
 {
     //First determine if we are at the end of a sequence
@@ -168,7 +191,7 @@ void __ISR (_TIMER_5_VECTOR, IPL1SOFT) Sequence_Timer_Interrupt(void)
         if (sequence.n == 1){
             stop_sequence();
         } else {
-            LATB_vect = sequence.LATB_seq_begin;//Go to first vector
+            begin_LAT_vects_sequence();
             //If not zero then decrement remaining repetitions
             if (sequence.n > 1) sequence.n--;
         }
@@ -177,6 +200,65 @@ void __ISR (_TIMER_5_VECTOR, IPL1SOFT) Sequence_Timer_Interrupt(void)
     }
 	IFS0bits.T5IF = 0;//Reset interrupt flag
 }
+#endif
+
+void receive_command_char(char rx){
+#ifdef MCU_MASTER
+        PIN_SET(PIN_RED);
+#endif
+    if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
+    command.comm[command.next_idx] = rx;
+    if (command.next_idx == 0) {
+        switch(rx) {
+#ifdef MCU_PROTOTYP
+            case 'd'://Delay
+#else
+            case 'a'://All
+            case 's'://Single
+#endif
+#ifndef MCU_MASTER
+            case 'l'://Load sequence
+            case 'i'://Init sequence
+#endif
+                command.next_idx++;
+                restart_command_timeout();
+                break;
+#ifdef MCU_SLAVE
+            case 'y'://Sync
+                TMR4 = 0;
+                break;
+#else
+            default:
+                transmit("%c not a command",rx);
+#endif
+#ifdef MCU_MASTER
+#else     
+#endif
+        }
+    } else {
+#ifdef MCU_PROTOTYP
+        if (command_set_delay()
+#else
+        if (command_set_all()
+                && command_set_single()
+#endif
+#ifndef MCU_MASTER
+                && command_load_sequence()
+                && command_init_sequence()
+#endif
+                ){//None of the commands
+            command.next_idx++;
+            restart_command_timeout();            
+        } else {
+            command.next_idx = 0;
+            clear_command_timeout();
+        }
+    }
+#ifdef MCU_MASTER
+    PIN_CLR(PIN_RED);
+#endif          
+}
+
 #ifndef MCU_PROTOTYP
 void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void) 
 {
@@ -187,38 +269,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
     }
     if(SPI1STATbits.SPIRBF){//Recieve
         char rx = SPI1BUF;
-        if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
-        command.comm[command.next_idx] = rx;
-        if (command.next_idx == 0) {
-            switch(rx) {
-                case 'a'://All
-                case 's'://Single
-                    command.next_idx++;
-                    restart_command_timeout();
-                    break;
-                case 'y'://Sync
-                    TMR4 = 0;
-                    break;
-            }
-        } else {
-            if ((command.comm[0] == 'a') && (command.next_idx == N_SIGNALS)) {
-                int i;
-                for (i = 1;i <= N_SIGNALS; i++){
-                    set_single(i-1,command.comm[i]);
-                }
-                command.next_idx = 0;
-                clear_command_timeout();
-                gen_LAT_vects();
-            } else if ((command.comm[0] == 's') && (command.next_idx == 2)) {
-                set_single(command.comm[1],command.comm[2]);
-                command.next_idx = 0;
-                clear_command_timeout();
-                gen_LAT_vects();
-            } else {
-                command.next_idx++;
-                restart_command_timeout();
-            }
-        }
+        receive_command_char(rx);
     }
 #else
     if(SPI1STATbits.SPITBE){
@@ -242,71 +293,18 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
 #ifndef MCU_SLAVE
 void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void) 
 { 
-    if(U1STAbits.OERR){//Overflow has occurred
-        //SPI1STATbits.SPIROV = 0;
-    }
-    if(U1STAbits.PERR){//Overflow has occurred
-    }
-    if(U1STAbits.FERR){//Overflow has occurred
-    }
     if(!U1STAbits.UTXBF && TRANSMITTING){//If space in transmit buffer and transmitting
         U1TXREG = next_tx_char();
     }
     if(U1STAbits.URXDA){//Recieve
         char rx = U1RXREG;
-#ifdef MCU_MASTER
-        PIN_SET(PIN_RED);
-#endif
-        if(command.next_idx >= sizeof(command.comm)) command.next_idx = 0;
-        command.comm[command.next_idx] = rx;
-        if (command.next_idx == 0) {
-            switch(rx) {
-#ifdef MCU_MASTER
-                case 'a'://All
-                case 's'://Single
-                    command.next_idx++;
-                    restart_command_timeout();
-                    break;
-                case 'r'://Read amperage and voltage
-                    command_read();
-                    break;
-#else
-                case 'd'://Delay
-                case 'l'://Load sequence
-                case 'i'://Init sequence
-                    command.next_idx++;
-                    restart_command_timeout();
-                    break;                    
-#endif
-                default:
-                    transmit("%c not a command",rx);
-            }
-        } else {
-#ifdef MCU_MASTER
-            if (command_set_all()
-                    && command_set_single()
-#else                
-            if (command_set_delay()
-                    && command_load_sequence()
-                    && command_init_sequence()
-#endif
-                    ){//None of the commands
-                command.next_idx++;
-                restart_command_timeout();            
-            } else {
-                command.next_idx = 0;
-                clear_command_timeout();
-#ifdef MCU_MASTER
-                PIN_CLR(PIN_RED);
-#endif
-            }
-        }
+        receive_command_char(rx);
     }
     IFS1CLR = 0x0380;
  }
 #endif
 
-#ifndef MCU_PROTOTYP
+#ifdef MCU_MASTER
 int command_set_all() {
     if((command.comm[0] != 'a') || (command.next_idx != 130)) return 1;
     int i,id = 0;
@@ -336,6 +334,24 @@ int command_set_single() {
     return 0;
 }
 #endif
+#ifdef MCU_SLAVE
+int command_set_all() {
+    if((command.comm[0] != 'a') || (command.next_idx != N_SIGNALS)) return 1;
+    int i;
+    for (i = 1;i <= N_SIGNALS; i++){
+        set_single(i-1,command.comm[i]);
+    }
+    gen_LAT_vects();
+    return 0;
+}
+
+int command_set_single() {
+    if ((command.comm[0] != 's') && (command.next_idx != 2)) return 1;
+    set_single(command.comm[1],command.comm[2]);
+    gen_LAT_vects();
+    return 0;
+}
+#endif
 #ifdef MCU_PROTOTYP
 int command_set_delay() {
     if ((command.comm[0] != 'd') || (command.next_idx != 1)) return 1;
@@ -360,7 +376,7 @@ int command_init_sequence() {
     T5CONbits.TCKPS = command.comm[2];//Set up timer (let timer handle turning off itself)
     PR5 = 10*command.comm[3];
     TMR5 = 0;
-    LATB_vect = sequence.LATB_seq_begin;//Go to first vector
+    begin_LAT_vects_sequence();
     T5CONbits.ON = 1;//Start timer
     if (n) transmit("%c: Success! Initiated sequence (%u times)", command.comm[0],n);
     else transmit("%c: Success! Initiated sequence loop", command.comm[0]);
@@ -384,13 +400,10 @@ int command_load_sequence() {
     stop_sequence();//Abort ongoing sequence
     LAT_t *old_LATB = LATB_vect;//Save the current address so we can restore it later
     unsigned char old_phase_shift = phase_shift;
-    increment_LAT_vects();
-    sequence.LATB_seq_begin = LATB_vect;
-    phase_shift = command.comm[2];
-    gen_LAT_vects();
-    int i = 3;
+    int i = 2;
     while(i <= n+1){//Generate the n next vectors (load sequence)
         increment_LAT_vects();
+        if(i == 2) sequence.LATB_seq_begin = LATB_vect;
         phase_shift = command.comm[i];
         gen_LAT_vects();
         i++;
@@ -400,6 +413,56 @@ int command_load_sequence() {
     phase_shift = old_phase_shift;
     transmit("%c: Success! Loaded sequence of %u phases",
             command.comm[0],command.comm[1]);
+    return 0;
+}
+#endif
+#ifdef MCU_SLAVE
+int command_init_sequence() {
+    if ((command.comm[0] != 'i') || (command.next_idx != 3)) return 1;
+    stop_sequence();//Abort ongoing sequence
+    sequence.n = command.comm[1];
+    T5CONbits.TCKPS = command.comm[2];//Set up timer (let timer handle turning off itself)
+    PR5 = 10*command.comm[3];
+    TMR5 = 0;
+    begin_LAT_vects_sequence();
+    T5CONbits.ON = 1;//Start timer
+    return 0;
+}
+/*
+ * Arguments are:
+ * n - number of steps
+ * ... - sequence steps
+*/
+int command_load_sequence() {
+    if (command.comm[0] != 'l') return 1;
+    int n = command.comm[1];
+    if (n*N_SIGNALS > CACHE_SIZE) return 0;//Command is done, failed
+    const int nargs = n*N_SIGNALS+1;
+    if(command.next_idx != nargs) return 1;//Command not yet done
+    
+    stop_sequence();//Abort ongoing sequence
+    LAT_t *old_LATA = LATA_vect;//Save the current address so we can restore it later
+    LAT_t *old_LATB = LATB_vect;
+    LAT_t *old_LATC = LATC_vect;
+    int i = 2;
+    while(i <= nargs){//Generate the n next vectors (load sequence)
+        increment_LAT_vects();
+        if(i == 2){
+            sequence.LATA_seq_begin = LATA_vect;
+            sequence.LATB_seq_begin = LATB_vect;
+            sequence.LATC_seq_begin = LATC_vect;
+        }
+        int j;
+        for (j = 0;j < N_SIGNALS; j++){
+            set_single(j,command.comm[i+j]);
+        }
+        gen_LAT_vects();
+        i += N_SIGNALS;
+    }
+    sequence.LATB_seq_end = LATB_vect;//Save end address, enough to save one
+    LATA_vect = old_LATA;
+    LATB_vect = old_LATB;
+    LATC_vect = old_LATC;
     return 0;
 }
 #endif

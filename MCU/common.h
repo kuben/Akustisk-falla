@@ -1,8 +1,8 @@
 #ifndef _COMMON_H    /* Guard against multiple inclusion */
 #define _COMMON_H
 
-#define MCU_PROTOTYP
-//#define MCU_SLAVE
+//#define MCU_PROTOTYP
+#define MCU_SLAVE
 //#define MCU_MASTER
 
 #include <xc.h>
@@ -22,19 +22,25 @@ extern void gen_LAT_vects();
 typedef uint16_t LAT_t;
 
 //Use only B-registers so that the cache can be larger
-extern volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD];
-extern LAT_t *volatile LATB_vect;
+extern volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD], LAT_t *volatile LATB_vect;
 extern volatile unsigned char phase_shift;
 extern void init_LAT_vects();
 #endif
+
 #ifdef MCU_SLAVE
 #define N_SIGNALS 26
+#define CACHE_SIZE 10
+
+typedef uint32_t LAT_t;
+
 struct signal {
     unsigned char up;
 };
 #define SET_SIGNAL(signal,delay) signal.up = delay
 extern volatile struct signal signal_array[N_SIGNALS];
-extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD],LATC_vect[PERIOD];
+extern volatile LAT_t LATA_cache[CACHE_SIZE][PERIOD],
+        LATB_cache[CACHE_SIZE][PERIOD],LATC_cache[CACHE_SIZE][PERIOD];
+extern volatile LAT_t *volatile LATA_vect, *volatile LATB_vect, *volatile LATC_vect;
 #endif
 
 struct pin_struct {
