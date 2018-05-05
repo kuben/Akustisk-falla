@@ -30,8 +30,7 @@ int transmit(char *new_status, ...);
 
 #ifdef MCU_PROTOTYP
 struct Sequence {
-    LATA_t *LATA_seq_begin, *LATA_seq_end;//First and lasts vectors in sequence
-    LATB_t *LATB_seq_begin;
+    LAT_t *LATB_seq_begin, *LATB_seq_end;//First and lasts vectors in sequence
     int n;//Number of times sequence is to be played
 };
 

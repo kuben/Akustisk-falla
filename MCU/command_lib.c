@@ -98,10 +98,8 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
 }
 #endif
 void increment_LAT_vects(){
-    LATA_vect += PERIOD;//Point to next vector
-    LATB_vect += PERIOD;
-    if(LATA_vect >= LATA_cache[CACHE_SIZE]){//If pointing beyond cache vector
-        LATA_vect = LATA_cache[0];
+    LATB_vect += PERIOD;//Point to next vector
+    if(LATB_vect >= LATB_cache[CACHE_SIZE]){//If pointing beyond cache vector
         LATB_vect = LATB_cache[0];
     }
 }
@@ -165,17 +163,14 @@ void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
 void __ISR (_TIMER_5_VECTOR, IPL1SOFT) Sequence_Timer_Interrupt(void)
 {
     //First determine if we are at the end of a sequence
-    if(LATA_vect == sequence.LATA_seq_end){
+    if(LATB_vect == sequence.LATB_seq_end){
         //If pointing to the last vect in sequence and n == 1 then end the sequence
         if (sequence.n == 1){
             stop_sequence();
-        } else if (sequence.n > 1){//If not zero then decrement remaining repetitions
-            sequence.n--;
-            LATA_vect = sequence.LATA_seq_begin;//Go to first vector
-            LATB_vect = sequence.LATB_seq_begin;
         } else {
-            LATA_vect = sequence.LATA_seq_begin;//Go to first vector
-            LATB_vect = sequence.LATB_seq_begin;   
+            LATB_vect = sequence.LATB_seq_begin;//Go to first vector
+            //If not zero then decrement remaining repetitions
+            if (sequence.n > 1) sequence.n--;
         }
     } else {
         increment_LAT_vects();//Point to next LAT_vect
@@ -365,8 +360,7 @@ int command_init_sequence() {
     T5CONbits.TCKPS = command.comm[2];//Set up timer (let timer handle turning off itself)
     PR5 = 10*command.comm[3];
     TMR5 = 0;
-    LATA_vect = sequence.LATA_seq_begin;//Go to first vector
-    LATB_vect = sequence.LATB_seq_begin;
+    LATB_vect = sequence.LATB_seq_begin;//Go to first vector
     T5CONbits.ON = 1;//Start timer
     if (n) transmit("%c: Success! Initiated sequence (%u times)", command.comm[0],n);
     else transmit("%c: Success! Initiated sequence loop", command.comm[0]);
@@ -388,11 +382,9 @@ int command_load_sequence() {
     if(command.next_idx != n+1) return 1;//Command not yet done, #of arguments is n+1
     
     stop_sequence();//Abort ongoing sequence
-    LATA_t *old_LATA = LATA_vect;//Save the current address so we can restore it later
-    LATB_t *old_LATB = LATB_vect;
+    LAT_t *old_LATB = LATB_vect;//Save the current address so we can restore it later
     unsigned char old_phase_shift = phase_shift;
     increment_LAT_vects();
-    sequence.LATA_seq_begin = LATA_vect;
     sequence.LATB_seq_begin = LATB_vect;
     phase_shift = command.comm[2];
     gen_LAT_vects();
@@ -403,17 +395,9 @@ int command_load_sequence() {
         gen_LAT_vects();
         i++;
     }
-    sequence.LATA_seq_end = LATA_vect;//Save begin and end address
-    LATA_vect = old_LATA;//Restore old vector
+    sequence.LATB_seq_end = LATB_vect;//Save end address
     LATB_vect = old_LATB;
     phase_shift = old_phase_shift;
-    /*for (i = 0;i < CACHE_SIZE;i++){
-    int t;
-        for (t = 0;t < PERIOD;t++){
-            LATA = LATA_cache[i][t];
-            LATB = LATB_cache[i][t];
-        }
-    }*/
     transmit("%c: Success! Loaded sequence of %u phases",
             command.comm[0],command.comm[1]);
     return 0;

@@ -65,10 +65,8 @@ void initMasterSPI();
 
 #ifndef MCU_MASTER
 void init_signals();
-volatile LATA_t LATA_cache[CACHE_SIZE][PERIOD] = {};
-volatile LATB_t LATB_cache[CACHE_SIZE][PERIOD] = {};
-LATA_t *volatile LATA_vect = LATA_cache[0];
-LATB_t *volatile LATB_vect = LATB_cache[0];
+volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD] = {};
+LAT_t *volatile LATB_vect = LATB_cache[0];
 volatile unsigned char phase_shift = 0;
 #ifdef MCU_SLAVE
 volatile uint32_t LATC_vect[PERIOD] = {};
@@ -78,7 +76,7 @@ volatile uint32_t LATC_vect[PERIOD] = {};
 static const struct pin_struct outputs[N_SIGNALS] = {
 #ifdef MCU_PROTOTYP
     PIN_B_STRUCT(8), PIN_B_STRUCT(9),
-    PIN_B_STRUCT(4), PIN_A_STRUCT(4)
+    PIN_B_STRUCT(4), PIN_B_STRUCT(3)
 #else
     PIN_A_STRUCT(4), PIN_A_STRUCT(0), //1 2
     PIN_A_STRUCT(9), PIN_A_STRUCT(1),
@@ -120,9 +118,9 @@ int main(int argc, char** argv) {
 #ifndef MCU_MASTER
     init_signals();
 #ifdef MCU_PROTOTYP
-    init_LAT_vects();
+    //init_LAT_vects();
 #endif
-    gen_LAT_vects();
+    //gen_LAT_vects();
 #endif
    
     //Run
@@ -134,9 +132,7 @@ int main(int argc, char** argv) {
         LATC = LATC_vect[tmr];
 #endif
 #ifdef MCU_PROTOTYP
-        int tmr = TMR4;
-        LATA = LATA_vect[tmr];
-        LATB = LATB_vect[tmr];
+        LATB = LATB_vect[TMR4];
 #endif
 #ifdef MCU_MASTER
         i++;
@@ -159,16 +155,12 @@ void init_LAT_vects(){//Run only at startup
     for (i = 0;i < CACHE_SIZE;i++){
         int t;
         for (t = 0;t < PERIOD/2;t++){//Signal is up, complement is down
-            LATA_cache[i][t] |= outputs[0].A_mask;//Set
-            LATB_cache[i][t] |= outputs[0].B_mask;
-            LATA_cache[i][t] &= ~outputs[1].A_mask;//Clr
-            LATB_cache[i][t] &= ~outputs[1].B_mask;
+            LATB_cache[i][t] |= outputs[0].B_mask;//Set
+            LATB_cache[i][t] &= ~outputs[1].B_mask;//Clr
         }
         for (;t < PERIOD;t++){//Signal is down, complement is up
-            LATA_cache[i][t] &= ~outputs[0].A_mask;//Clr
-            LATB_cache[i][t] &= ~outputs[0].B_mask;
-            LATA_cache[i][t] |= outputs[1].A_mask;//Set
-            LATB_cache[i][t] |= outputs[1].B_mask;
+            LATB_cache[i][t] &= ~outputs[0].B_mask;//Clr
+            LATB_cache[i][t] |= outputs[1].B_mask;//Set
         }
     }
 }
@@ -177,18 +169,14 @@ void gen_LAT_vects(){//Run when changing phase_shift
     int t = FAS(phase_shift);//The phase shift of the second signal
     int i;
     for (i = 0;i < PERIOD/2;i++){//Signal is up, complement is down
-        LATA_vect[t] |= outputs[2].A_mask;//Set
-        LATB_vect[t] |= outputs[2].B_mask;
-        LATA_vect[t] &= ~outputs[3].A_mask;//Clr
-        LATB_vect[t] &= ~outputs[3].B_mask;
+        LATB_vect[t] |= outputs[2].B_mask;//Set
+        LATB_vect[t] &= ~outputs[3].B_mask;//Clr
         t++;
         if (t >= PERIOD) t = 0;
     }
     for (;i < PERIOD;i++){//Signal is down, complement is up
-        LATA_vect[t] &= ~outputs[2].A_mask;//Clr
-        LATB_vect[t] &= ~outputs[2].B_mask;
-        LATA_vect[t] |= outputs[3].A_mask;//Set
-        LATB_vect[t] |= outputs[3].B_mask;
+        LATB_vect[t] &= ~outputs[2].B_mask;//Clr
+        LATB_vect[t] |= outputs[3].B_mask;//Set
         t++;
         if (t >= PERIOD) t = 0;
     }

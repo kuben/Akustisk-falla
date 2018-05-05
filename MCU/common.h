@@ -17,15 +17,13 @@ extern void gen_LAT_vects();
 
 #ifdef MCU_PROTOTYP
 #define N_SIGNALS 4
-#define CACHE_SIZE 60
+#define CACHE_SIZE 240
 
-typedef uint32_t LATA_t;
-typedef uint32_t LATB_t;
+typedef uint16_t LAT_t;
 
-extern volatile LATA_t LATA_cache[CACHE_SIZE][PERIOD];
-extern volatile LATB_t LATB_cache[CACHE_SIZE][PERIOD];
-extern LATA_t *volatile LATA_vect;
-extern LATB_t *volatile LATB_vect;
+//Use only B-registers so that the cache can be larger
+extern volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD];
+extern LAT_t *volatile LATB_vect;
 extern volatile unsigned char phase_shift;
 extern void init_LAT_vects();
 #endif
