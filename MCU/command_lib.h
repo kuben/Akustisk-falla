@@ -53,7 +53,6 @@ int command_set_single();
 int command_read();
 #endif
 #ifdef MCU_PROTOTYP
-int command_set_period();
 int command_set_delay();
 #endif
 void restart_command_timeout();

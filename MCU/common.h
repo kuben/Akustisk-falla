@@ -10,14 +10,15 @@
 #ifndef MCU_MASTER
 extern void gen_LAT_vects();
 #define PRESCALE_TMR 4
+#define PERIOD 62   //Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
+#define TMR_MAX 61  //PERIOD - 1
+#define FAS(t) t*PERIOD/250
 #endif
 
 #ifdef MCU_PROTOTYP
 #define N_SIGNALS 4
-#define PERIOD 75 //Allocate more than enough for 40kHz
 
 extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD];
-extern volatile unsigned char period;
 extern volatile unsigned char phase_shift;
 extern void init_LAT_vects();
 #endif
@@ -28,9 +29,6 @@ struct signal {
 };
 #define SET_SIGNAL(signal,delay) signal.up = delay
 extern volatile struct signal signal_array[N_SIGNALS];
-#define PERIOD 62   //Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
-#define TMR_MAX 61  //PERIOD - 1
-#define FAS(t) t*PERIOD/250
 extern volatile uint32_t LATA_vect[PERIOD], LATB_vect[PERIOD],LATC_vect[PERIOD];
 #endif
 

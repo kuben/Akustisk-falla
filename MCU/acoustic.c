@@ -66,7 +66,6 @@ void initMasterSPI();
 #ifndef MCU_MASTER
 void init_signals();
 volatile uint32_t LATA_vect[PERIOD] = {}, LATB_vect[PERIOD] = {};
-volatile unsigned char period = 62;
 volatile unsigned char phase_shift = 0;
 #ifdef MCU_SLAVE
 volatile uint32_t LATC_vect[PERIOD] = {};
@@ -154,13 +153,13 @@ int main(int argc, char** argv) {
 #ifdef MCU_PROTOTYP
 void init_LAT_vects(){//Run when changing period
     int t;
-    for (t = 0;t < period/2;t++){//Signal is up, complement is down
+    for (t = 0;t < PERIOD/2;t++){//Signal is up, complement is down
         LATA_vect[t] |= outputs[0].A_mask;//Set
         LATB_vect[t] |= outputs[0].B_mask;
         LATA_vect[t] &= ~outputs[1].A_mask;//Clr
         LATB_vect[t] &= ~outputs[1].B_mask;
     }
-    for (;t < period;t++){//Signal is down, complement is up
+    for (;t < PERIOD;t++){//Signal is down, complement is up
         LATA_vect[t] &= ~outputs[0].A_mask;//Clr
         LATB_vect[t] &= ~outputs[0].B_mask;
         LATA_vect[t] |= outputs[1].A_mask;//Set
@@ -169,23 +168,23 @@ void init_LAT_vects(){//Run when changing period
 }
 void gen_LAT_vects(){//Run when changing phase_shift
     //No need to memset LAT_vects
-    unsigned char t = phase_shift;//The phase shift of the second signal
+    int t = phase_shift;//The phase shift of the second signal
     int i;
-    for (i = 0;i < period/2;i++){//Signal is up, complement is down
+    for (i = 0;i < PERIOD/2;i++){//Signal is up, complement is down
         LATA_vect[t] |= outputs[2].A_mask;//Set
         LATB_vect[t] |= outputs[2].B_mask;
         LATA_vect[t] &= ~outputs[3].A_mask;//Clr
         LATB_vect[t] &= ~outputs[3].B_mask;
         t++;
-        if (t >= period) t = 0;
+        if (t >= PERIOD) t = 0;
     }
-    for (;i < period;i++){//Signal is down, complement is up
+    for (;i < PERIOD;i++){//Signal is down, complement is up
         LATA_vect[t] &= ~outputs[2].A_mask;//Clr
         LATB_vect[t] &= ~outputs[2].B_mask;
         LATA_vect[t] |= outputs[3].A_mask;//Set
         LATB_vect[t] |= outputs[3].B_mask;
         t++;
-        if (t >= period) t = 0;
+        if (t >= PERIOD) t = 0;
     }
 }
 #endif
@@ -327,30 +326,6 @@ void InitializeSystem(void)
 #ifdef MCU_SLAVE
     ANSELC = 0;
 #endif
-#ifdef MCU_MASTER
-    TRISASET = 3;
-    ANSELA = 3;
-    AD1CON1bits.ON = 0;
-    IPC5bits.AD1IP = 2;
-    IPC5bits.AD1IS = 0;
-    IEC0bits.AD1IE = 1;
-    IFS0bits.AD1IF = 0;
-    Nop();
-    AD1CON1bits.SSRC = 0;//0b111;
-    AD1CON2bits.CSCNA = 0;
-    AD1CON1bits.ASAM = 1;//No auto sample
-    AD1CON3bits.SAMC = 0b11111;//sample time = 32 sample periods
-    AD1CON3bits.ADCS = 1;//Sample period = clock period * 2 * (ADCS + 1)
-    AD1CON1bits.ON = 1;
-    
-    //Configure Clock output
- //   RPA2R = 0b0111;
- //   TRISACLR = 0x04;//Set RA2 output
- //   REFOCONbits.OE = 1;
- //   REFOCONbits.ROSEL = 0;//System clock
- //   REFOCONbits.OE = 1;
- //   REFOCONbits.ON = 1;
-#endif
     
     /* Let Timer 2 (in 32-bit mode) be command time-out timer 
      * Timer 4 be 40kHz-timer
@@ -384,11 +359,7 @@ void InitializeSystem(void)
     IEC0bits.T4IE = 1;// Enable interrupts from Timer 2
 #else    
     T4CONbits.TCKPS = PRESCALE_TMR;
-#ifdef MCU_SLAVE
     PR4 = TMR_MAX;
-#else
-    PR4 = period-1;
-#endif
     T4CONbits.TON = 1;
 #endif
     

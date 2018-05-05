@@ -266,8 +266,7 @@ void __ISR(_UART1_VECTOR, IPL2SOFT) UART_Interrupt(void)
             if (command_set_all()
                     && command_set_single()
 #else                
-            if (command_set_period()
-                    && command_set_delay()
+            if (command_set_delay()
 #endif
                     ){//None of the commands
                 command.next_idx++;
@@ -347,24 +346,11 @@ int command_read(){
 }
 #endif
 #ifdef MCU_PROTOTYP
-int command_set_period() {
-    if ((command.comm[0] != 'p') || (command.next_idx != 1)) return 1;
-    period = command.comm[1];
-    T4CONbits.ON = 0;
-    PR4 = period-1;
-    init_LAT_vects();
-    gen_LAT_vects();
-    TMR4 = 0;
-    T4CONbits.ON = 1;
-    transmit("%c: Success. Set period to %u",command.comm[0],command.comm[1]);
-    return 0;
-}
-
 int command_set_delay() {
     if ((command.comm[0] != 'd') || (command.next_idx != 1)) return 1;
     phase_shift = command.comm[1];
     gen_LAT_vects();
-    transmit("%c: Success delay set to %u",
+    transmit("%c: Success! Delay set to %u",
             command.comm[0],command.comm[1]);
     return 0;
 }
