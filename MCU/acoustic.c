@@ -1,6 +1,6 @@
 //#define PRAGMA_PROTOTYP
-#define PRAGMA_SLAVE
-//#define PRAGMA_MASTER
+//#define PRAGMA_SLAVE
+#define PRAGMA_MASTER
 
 #pragma config PMDL1WAY = OFF            // Peripheral Module Disable Configuration (Allow only one reconfiguration)
 #pragma config IOL1WAY = OFF             // Peripheral Pin Select Configuration (Allow only one reconfiguration)
@@ -25,11 +25,7 @@
 #else
 #pragma config OSCIOFNC = OFF
 #endif
-#ifndef PRAGMA_MASTER
 #pragma config FPBDIV = DIV_1           // Peripheral Clock Divisor (Pb_Clk is Sys_Clk = 40MHz)
-#else
-#pragma config FPBDIV = DIV_2           // Peripheral Clock Divisor (Pb_Clk is Sys_Clk/2 = 20MHz)
-#endif
 
 #pragma config FCKSM = CSDCMD           // Clock Switching and Monitor Selection (Clock Switch Disable, FSCM Disabled)
 #pragma config WDTPS = PS1048576        // Watchdog Timer Postscaler (1:1048576)
@@ -231,9 +227,9 @@ void init_signals(){
 #ifndef MCU_SLAVE
 void initUART() {
     U1MODEbits.ON = 0;
-    U1MODEbits.BRGH = 1;//Baud rate 116280
+    U1MODEbits.BRGH = 1;
     //U1STAbits.UTXISEL = 0b10;//Interrupt when TX empty
-    U1BRG = 84;
+    U1BRG = 85;//Baud rate 116280
     
     TRISBSET = 0xa000;//RB13 and 15 inputs
     U1RXRbits.U1RXR = 0b0011;//RB13 (pin 24)   U1RX
@@ -298,7 +294,7 @@ void initMasterSPI(){
     SPI1CONbits.CKE = 1;        // Output data changes on transition from idle to active
     SPI1CONbits.MSTEN = 1;       // In master mode
     //Tar drygt 2ms per slave kort och 'a'-kommando
-    SPI1BRG = 100;                //PB-clock 20MHz, divide by 100
+    SPI1BRG = 200;                //PB-clock 40MHz, divide by 200
     
     //SCK1 (pin 25) SPI CLK
     RPB6Rbits.RPB6R = 0b0011;//RPB6 (pin 15) SPI MISO. Also PGEC3
@@ -327,7 +323,7 @@ void InitializeSystem(void)
     
     T2CONbits.TON = 0;// Turn off the timer
     T3CONbits.TON = 0;
-    T2CONbits.TCKPS = 7;// Pre-Scale timer 2 = 1:256 (T2Clk: 20MHz / 256 = 78.125kHz)
+    T2CONbits.TCKPS = 7;// Pre-Scale timer 2 = 1:256 (T2Clk: 40MHz / 256 = 156.25kHz)
     T2CONbits.T32 = 1;
     IPC3bits.T3IP = 2;// Set the interrupt priority to 2
     IFS0bits.T3IF = 0;// Reset the Timer 2 interrupt flag
@@ -335,13 +331,13 @@ void InitializeSystem(void)
        
     TMR2 = 0;
     TMR3 = 0;
-    uint32_t one_second = 78125;
+    uint32_t one_second = 156250;
     PR2 = one_second/2;
 
     T4CONbits.TON = 0;
     TMR4 = 0;
 #ifdef MCU_MASTER
-    T4CONbits.TCKPS = 1;// Pre-Scale timer 4 = 1:2 (10MHz)
+    T4CONbits.TCKPS = 2;// Pre-Scale timer 4 = 1:4 (10MHz)
     PR4 = 1000;
     IPC4bits.T4IP = 1;// Set the interrupt priority to 1
     IFS0bits.T4IF = 0;// Reset the Timer 2 interrupt flag
@@ -351,7 +347,7 @@ void InitializeSystem(void)
     PR4 = TMR_MAX;
     T4CONbits.TON = 1;
     
-    T5CONbits.TON = 0;//TMR5 is sequence timer
+    T5CONbits.TON = 0;//TMR5 is sequence timerx
     IPC5bits.T5IP = 1;
     IFS0bits.T5IF = 0;
     IEC0bits.T5IE = 1;

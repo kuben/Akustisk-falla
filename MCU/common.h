@@ -2,8 +2,8 @@
 #define _COMMON_H
 
 //#define MCU_PROTOTYP
-#define MCU_SLAVE
-//#define MCU_MASTER
+//#define MCU_SLAVE
+#define MCU_MASTER
 
 #include <xc.h>
 
