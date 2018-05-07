@@ -42,10 +42,11 @@ static volatile struct Sequence sequence = {};
 struct SPI_transmission {
     signed int slave_id;//-1 when empty spot in queue
     signed int pos;//-1 when transmitting command char
-    char command;//'a' or 's'
-    char data[26];
+    char command;//'a' or 's' or others
+    char data[3*2*PERIOD];
 };
-#define COMM_LEN(comm) ((comm == 'a')?26:((comm == 's')?2:0))
+static const uint16_t comm_len[256] = {['a'] = 26, ['s'] = 2, ['n'] = 3*2*PERIOD};
+
 
 //#define TRANSMITTING (tx_buffer.pos > -1)
 
@@ -59,8 +60,6 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data);
 int set_single(int num, char val);
 #else
 void stop_sequence();
-int command_load_sequence();
-int command_init_sequence();
 void increment_LAT_vects();
 void begin_LAT_vects_sequence();
 #endif
@@ -69,6 +68,12 @@ int command_set_delay();
 #else
 int command_set_all();
 int command_set_single();
+int command_load_sequence();
+int command_init_sequence();
+#endif
+#ifdef MCU_MASTER
+int command_next_in_sequence();
+int command_init_sequence();
 #endif
 void restart_command_timeout();
 void clear_command_timeout();

@@ -39,14 +39,13 @@ int shift_queue(){
     int i;
     for(i = 1;i < SPI_QUEUE_LEN;i++){
         if(spi_queue[i].slave_id == -1){//Empty, stop shifting
-            spi_queue[i-1].slave_id = -2;//-2 means a sync signal has to be sent
             break;
         }
         spi_queue[i-1].slave_id = spi_queue[i].slave_id;
         spi_queue[i-1].pos = -1;
         spi_queue[i-1].command = spi_queue[i].command;
         int j;
-        for(j = 0;j < COMM_LEN(spi_queue[i].command);j++){
+        for(j = 0;j < comm_len[spi_queue[i].command];j++){
             spi_queue[i-1].data[j] = spi_queue[i].data[j];
         }
     }
@@ -57,13 +56,14 @@ int shift_queue(){
 char next_SPI_tx_char(){
     char ret;
     if(spi_queue[0].pos < 0){//First char
-        SEL_SLAVE(spi_queue[0].slave_id);
+        if(spi_queue[0].slave_id == 5) SEL_ALL_SLAVES;
+        else SEL_SLAVE(spi_queue[0].slave_id);
         ret = spi_queue[0].command;
     } else {
         ret = spi_queue[0].data[spi_queue[0].pos];
     }
     spi_queue[0].pos++;
-    if(spi_queue[0].pos >= COMM_LEN(spi_queue[0].command)){//End of command
+    if(spi_queue[0].pos >= comm_len[spi_queue[0].command]){//End of command
         shift_queue();//Shift everything forward in queue
         IEC1bits.SPI1TXIE = 0;//Disable interrupts
         T4CONbits.TON = 1;//Wait for SPIBUSY before deselecting slave
@@ -78,10 +78,10 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
         if(spi_queue[q].slave_id < 0) break;
     }
     if(q == SPI_QUEUE_LEN) return 1;//Queue full
-    
+        
     spi_queue[q].command = command;
     int i;
-    for (i = 0; i < COMM_LEN(command);i++) {
+    for (i = 0; i < comm_len[command];i++) {
         spi_queue[q].data[i] = data[i];
     }
     spi_queue[q].slave_id = slave_id;
@@ -91,7 +91,6 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
     if(q+1 < SPI_QUEUE_LEN){
         spi_queue[q+1].slave_id = -1;
     }
-    //transmit("Queued SPI Transmission in place %i",q);
     PIN_SET(PIN_YELLOW);
     T4CONbits.TON = 1;//Let timer start transmission if not busy
     return 0;
@@ -99,6 +98,15 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data){
 #else
 void stop_sequence(){
     T5CONbits.ON = 0;
+}
+#endif
+#ifndef MCU_MASTER
+void begin_LAT_vects_sequence(){
+    LATB_vect = sequence.LATB_seq_begin;//Go to first vector
+#ifdef MCU_SLAVE
+    LATA_vect = sequence.LATA_seq_begin;
+    LATC_vect = sequence.LATC_seq_begin;
+#endif
 }
 #endif
 #ifdef MCU_PROTOTYP
@@ -121,13 +129,6 @@ void increment_LAT_vects(){
     }
 }
 
-void begin_LAT_vects_sequence(){
-    LATB_vect = sequence.LATB_seq_begin;//Go to first vector
-#ifdef MCU_SLAVE
-    LATA_vect = sequence.LATA_seq_begin;
-    LATC_vect = sequence.LATC_seq_begin;
-#endif
-}
 #endif
 void restart_command_timeout(){
     TMR2 = 0;    // Clear counter
@@ -151,12 +152,7 @@ int set_single(int num, char val){
 void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
 {
     if(!SPI1STATbits.SPIBUSY){
-        if(spi_queue[0].slave_id == -2){
-            //No more commands
-            volatile int i;
-            for (i = 0;i < 2000;i++);//Wait 500us (measured in oscilloscope)
-            IEC1bits.SPI1TXIE = 1;//Send sync signal
-        } else if(spi_queue[0].slave_id == -1){
+        if(spi_queue[0].slave_id == -1){
             //Sync signal sent
             UNSEL_ALL_SLAVES;
             PIN_CLR(PIN_YELLOW);
@@ -216,9 +212,11 @@ void receive_command_char(char rx){
             case 'a'://All
             case 's'://Single
 #endif
-#ifndef MCU_MASTER
-            case 'l'://Load sequence
             case 'i'://Init sequence
+#ifdef MCU_MASTER
+            case 'n'://Next in sequence
+#else          
+            case 'l'://Load sequence
 #endif
                 command.next_idx++;
                 restart_command_timeout();
@@ -228,6 +226,18 @@ void receive_command_char(char rx){
                 TMR4 = 0;
                 break;
 #else
+#ifdef MCU_MASTER          
+            case 'b'://Begin sequence
+                //Id 5 means all. No arguments so passing 0 pointer
+                if(queue_SPI_tx(5, 'n', 0)) transmit("%c: Failed, queue full.", command.comm[0]);
+                else transmit("%c: Success!",command.comm[0]);
+                break;          
+            case 'y'://Sync
+                //Id 5 means all. No arguments so passing 0 pointer
+                if(queue_SPI_tx(5, 'y', 0)) transmit("%c: Failed, queue full.", command.comm[0]);
+                else transmit("%c: Success!",command.comm[0]);
+                break;
+#endif
             default:
                 transmit("%c not a command",rx);
 #endif
@@ -242,9 +252,11 @@ void receive_command_char(char rx){
         if (command_set_all()
                 && command_set_single()
 #endif
-#ifndef MCU_MASTER
-                && command_load_sequence()
                 && command_init_sequence()
+#ifdef MCU_MASTER
+                && command_next_in_sequence()
+#else
+                && command_load_sequence()
 #endif
                 ){//None of the commands
             command.next_idx++;
@@ -273,12 +285,7 @@ void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void)
     }
 #else
     if(SPI1STATbits.SPITBE){
-        if(spi_queue[0].slave_id == -1){
-            //Transmission done
-        } else if (spi_queue[0].slave_id == -2){//Transmission done, but sync not yet sent
-            SEL_ALL_SLAVES;
-            SPI1BUF = 'y';
-            spi_queue[0].slave_id = -1;//Transmission done after this
+        if(spi_queue[0].slave_id == -1){//Transmission done
             IEC1bits.SPI1TXIE = 0;//Disable interrupts
             T4CONbits.ON = 1;//Wait for SPIBUSY before deselecting slave
         } else {
@@ -365,21 +372,24 @@ int command_set_delay() {
 /*
  * Arguments are:
  * times - how many times to play the sequence. 0 for inifinity
- * TMR_prescaler
- * TMR_count
+ * upper_bit
+ * lower_bit - upper and lower bits form number of milliseconds of duration
 */
 int command_init_sequence() {
     if ((command.comm[0] != 'i') || (command.next_idx != 3)) return 1;
     stop_sequence();//Abort ongoing sequence
     int n = command.comm[1];
     sequence.n = n;
-    T5CONbits.TCKPS = command.comm[2];//Set up timer (let timer handle turning off itself)
-    PR5 = 10*command.comm[3];
+    //uint32_t req_count = ((command.comm[2]<<8) + command.comm[3])*157-1;
+    uint16_t count = (((command.comm[2]<<8) + command.comm[3])*16-1) & 0xffff;
+    //Set up timer (let timer handle turning off itself)
+    T5CONbits.TCKPS = 7;//Prescale 1:256command.comm[2];
+    PR5 = count;
     TMR5 = 0;
     begin_LAT_vects_sequence();
     T5CONbits.ON = 1;//Start timer
-    if (n) transmit("%c: Success! Initiated sequence (%u times)", command.comm[0],n);
-    else transmit("%c: Success! Initiated sequence loop", command.comm[0]);
+    if (n) transmit("%c: Success! Init. seq. (step: %ums , iter: %u)", command.comm[0], (count+1)/16, n);
+    else transmit("%c: Success! Init. seq. (step: %ums , loop)", (count+1)/16, command.comm[0]);
     return 0;
 }
 /*
@@ -463,6 +473,40 @@ int command_load_sequence() {
     LATA_vect = old_LATA;
     LATB_vect = old_LATB;
     LATC_vect = old_LATC;
+    return 0;
+}
+#endif
+#ifdef MCU_MASTER
+int command_init_sequence() {
+    if ((command.comm[0] != 'i') || (command.next_idx != 3)) return 1;
+    if(queue_SPI_tx(5, 'i', command.comm + 1)){//Failed
+        transmit("%c: Failed, queue full.", command.comm[0]);
+    } else {
+        uint16_t count = (((command.comm[2]<<8) + command.comm[3])*16-1) & 0xffff;
+        transmit("%c: Success! Init. seq. with step: %ums", command.comm[0], (count+1)/16);
+    }
+    return 0;
+}
+/*
+ * next_in_sequence sends a set of LATA, LATB, and LATC vects
+ * The slave appends these at the end of the last sequence
+ * First the sequence has to be reset (begin_sequence)
+ * Arugments: 130 phases
+ */
+int command_next_in_sequence() {//Typ 1ms
+    if((command.comm[0] != 'n') || (command.next_idx != 130)) return 1;
+    int i,id = 0;
+    for(i = 1;i < 130; i += 26){
+        char *phases = (char *)command.comm+i;
+        char LAT_vects[2*3*PERIOD] = {};
+        gen_LAT_vects_sequence(phases,LAT_vects);
+        if(queue_SPI_tx(id, 'n', LAT_vects)){//Failed
+            transmit("%c: Failed on id %i, queue full.", command.comm[0], id);
+            break;
+        }
+        id++;
+    }
+    if (id == 5) transmit("%c: Sent LAT_vects to id 0 through 4",command.comm[0]);
     return 0;
 }
 #endif

@@ -10,25 +10,27 @@
 #ifndef MCU_MASTER
 extern void gen_LAT_vects();
 #define PRESCALE_TMR 4
-#define PERIOD 62   //Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
-#define TMR_MAX 61  //PERIOD - 1
-#define FAS(t) t*PERIOD/250
 #endif
+#define PERIOD 62   //Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
+#define FAS(t) t*PERIOD/250
+#define TMR_MAX 61  //PERIOD - 1
+#define N_SIGNALS 26
 
 #ifdef MCU_PROTOTYP
 #define N_SIGNALS 4
-#define CACHE_SIZE 240
+#define CACHE_SIZE 230
 
 typedef uint16_t LAT_t;
 
 //Use only B-registers so that the cache can be larger
-extern volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD], LAT_t *volatile LATB_vect;
+extern volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD];
+extern volatile LAT_t *volatile LATB_vect;
 extern volatile unsigned char phase_shift;
 extern void init_LAT_vects();
+#else
 #endif
-
+#define DUTY PERIOD/2 //PERIOD/2 for 50% duty cycle
 #ifdef MCU_SLAVE
-#define N_SIGNALS 26
 #define CACHE_SIZE 10
 
 typedef uint32_t LAT_t;
@@ -42,11 +44,14 @@ extern volatile LAT_t LATA_cache[CACHE_SIZE][PERIOD],
         LATB_cache[CACHE_SIZE][PERIOD],LATC_cache[CACHE_SIZE][PERIOD];
 extern volatile LAT_t *volatile LATA_vect, *volatile LATB_vect, *volatile LATC_vect;
 #endif
+#ifdef MCU_MASTER
+extern void gen_LAT_vects_sequence(char *phases, char *LAT_vects);
+#endif
 
 struct pin_struct {
     uint32_t A_mask;
     uint32_t B_mask;
-#ifdef MCU_SLAVE
+#ifndef MCU_PROTOTYP
     uint32_t C_mask;
 #endif
 };
@@ -66,7 +71,7 @@ struct pin_struct {
 #endif
 #define PIN_A_STRUCT(i) ((struct pin_struct) { .A_mask = 1<<i})
 #define PIN_B_STRUCT(i) ((struct pin_struct) { .B_mask = 1<<i})
-#ifdef MCU_SLAVE
+#ifndef MCU_PROTOTYP
 #define PIN_C_STRUCT(i) ((struct pin_struct) { .C_mask = 1<<i})
 #endif
 

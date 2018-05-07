@@ -54,9 +54,9 @@ volatile struct signal signal_array[N_SIGNALS] = {0};
 void initSlaveSPI(void);
 #else
 void initUART(void);
+#endif
 #ifdef MCU_MASTER
 void initMasterSPI();
-#endif
 #endif
 
 #ifndef MCU_MASTER
@@ -64,15 +64,14 @@ void init_signals();
 volatile unsigned char phase_shift = 0;
 #ifdef MCU_PROTOTYP
 volatile LAT_t LATB_cache[CACHE_SIZE][PERIOD] = {};
-volatile *volatile LATB_vect = LATB_cache[0];
+volatile LAT_t *volatile LATB_vect = LATB_cache[0];
 #else
 volatile LAT_t LATA_cache[CACHE_SIZE][PERIOD] = {},
         LATB_cache[CACHE_SIZE][PERIOD] = {}, LATC_cache[CACHE_SIZE][PERIOD] = {};
 volatile LAT_t *volatile LATA_vect = LATA_cache[0],
         *volatile LATB_vect = LATB_cache[0], *volatile LATC_vect = LATC_cache[0];
 #endif
-
-//Setup outputs
+#endif
 static const struct pin_struct outputs[N_SIGNALS] = {
 #ifdef MCU_PROTOTYP
     PIN_B_STRUCT(8), PIN_B_STRUCT(9),
@@ -93,14 +92,16 @@ static const struct pin_struct outputs[N_SIGNALS] = {
     PIN_C_STRUCT(8), PIN_B_STRUCT(4)
 #endif
     };
-#endif
-int main(int argc, char** argv) {
+
+int main() {
     //Initialization
     InitializeSystem();
 #ifdef MCU_SLAVE
     initSlaveSPI();
 #else
     initUART();
+    transmit("Started up");
+#endif
 #ifdef MCU_MASTER
     initMasterSPI();
     
@@ -113,14 +114,13 @@ int main(int argc, char** argv) {
     
     volatile int i = 0;//So the compiler doesn't optimize the infinite while loop
 #endif
-#endif
     
 #ifndef MCU_MASTER
     init_signals();
 #ifdef MCU_PROTOTYP
-    //init_LAT_vects();
+    init_LAT_vects();
 #endif
-    //gen_LAT_vects();
+    gen_LAT_vects();
 #endif
    
     //Run
@@ -197,10 +197,36 @@ void gen_LAT_vects(){
         unsigned char t = FAS(signal_array[s].up);
         if(t > TMR_MAX) continue;//Transducer is off, continue
         int i;
-        for (i = 0;i < PERIOD/2;i++){
+        for (i = 0;i < DUTY;i++){
             LATA_vect[t] |= outputs[s].A_mask;
             LATB_vect[t] |= outputs[s].B_mask;
             LATC_vect[t] |= outputs[s].C_mask;
+            t++;
+            if (t > TMR_MAX) t = 0;
+        }
+    }
+}
+#endif
+#ifdef MCU_MASTER
+/*
+ * LAT_vects as 
+ * most significant(LATA[0]) least significant(LATA[0]) most significant(LATA[1])...
+ * ... LATB ... LATC
+ */
+void gen_LAT_vects_sequence(char *phases, char *LAT_vects){
+    memset(LAT_vects,0,3*2*PERIOD);
+    uint16_t *LATA = (uint16_t *)LAT_vects;//The same as LAT_vects but 16-bit formatting
+    uint16_t *LATB = LATA + PERIOD;
+    uint16_t *LATC = LATB + PERIOD;
+    int s;
+    for(s = 0;s < 26;s++){
+        unsigned char t = FAS(phases[s]);
+        if(t > TMR_MAX) continue;//Transducer is off, continue
+        int i;
+        for (i = 0;i < DUTY;i++){
+            LATA[t] |= outputs[s].A_mask;
+            LATB[t] |= outputs[s].B_mask;
+            LATC[t] |= outputs[s].C_mask;
             t++;
             if (t > TMR_MAX) t = 0;
         }
@@ -228,22 +254,18 @@ void init_signals(){
 void initUART() {
     U1MODEbits.ON = 0;
     U1MODEbits.BRGH = 1;
-    //U1STAbits.UTXISEL = 0b10;//Interrupt when TX empty
     U1BRG = 85;//Baud rate 116280
     
     TRISBSET = 0xa000;//RB13 and 15 inputs
     U1RXRbits.U1RXR = 0b0011;//RB13 (pin 24)   U1RX
     RPB15Rbits.RPB15R = 0b0001;//RB15 (pin 26) U1TX
     
-    IFS1bits.U1TXIF = 0;   //Clear flags
-    IFS1bits.U1RXIF = 0;
-    IFS1bits.U1EIF = 0;
+    IFS1CLR = 0x0380;
     IPC8bits.U1IP = 2; //Set priority 3
     IPC8bits.U1IS = 0;
     IEC1bits.U1EIE = 1;
     IEC1bits.U1RXIE = 1;
     IEC1bits.U1TXIE = 0;  //Transmit interrupt disabled unless transmitting
-    //IEC0SET=0x03800000; // Enable RX, TX and Error interrupts
     
     U1MODEbits.ON = 1;
     U1STAbits.URXEN = 1;
@@ -347,16 +369,12 @@ void InitializeSystem(void)
     PR4 = TMR_MAX;
     T4CONbits.TON = 1;
     
-    T5CONbits.TON = 0;//TMR5 is sequence timerx
+    T5CONbits.TON = 0;//TMR5 is sequence timer
     IPC5bits.T5IP = 1;
     IFS0bits.T5IF = 0;
     IEC0bits.T5IE = 1;
 #endif
-    
-    /* Set Interrupt Controller for multi-vector mode */
-    INTCONSET = _INTCON_MVEC_MASK;
-
-    /* Enable Interrupt Exceptions */
-    // set the CP0 status IE bit high to turn on interrupts globally
-    __builtin_enable_interrupts();
+   
+    INTCONSET = _INTCON_MVEC_MASK;//Set Interrupt Controller for multi-vector mode 
+    __builtin_enable_interrupts();//Set the CP0 status IE bit high to turn on interrupts globally
 }
