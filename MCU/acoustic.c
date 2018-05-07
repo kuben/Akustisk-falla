@@ -1,6 +1,6 @@
 //#define PRAGMA_PROTOTYP
-//#define PRAGMA_SLAVE
-#define PRAGMA_MASTER
+#define PRAGMA_SLAVE
+//#define PRAGMA_MASTER
 
 #pragma config PMDL1WAY = OFF            // Peripheral Module Disable Configuration (Allow only one reconfiguration)
 #pragma config IOL1WAY = OFF             // Peripheral Pin Select Configuration (Allow only one reconfiguration)

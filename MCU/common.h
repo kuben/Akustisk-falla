@@ -2,8 +2,8 @@
 #define _COMMON_H
 
 //#define MCU_PROTOTYP
-//#define MCU_SLAVE
-#define MCU_MASTER
+#define MCU_SLAVE
+//#define MCU_MASTER
 
 #include <xc.h>
 
@@ -31,9 +31,9 @@ extern void init_LAT_vects();
 #endif
 #define DUTY PERIOD/2 //PERIOD/2 for 50% duty cycle
 #ifdef MCU_SLAVE
-#define CACHE_SIZE 10
+#define CACHE_SIZE 38
 
-typedef uint32_t LAT_t;
+typedef uint16_t LAT_t;
 
 struct signal {
     unsigned char up;
