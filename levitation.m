@@ -1,15 +1,15 @@
 clear, latex_fonts
 
 Transducer.clear_all()
-%Övre
-Transducer.add_circle([0 0 56e-3],6,10.5e-3,[0 0 1],0,-pi/2)
-Transducer.add_circle([0 0 53e-3],12,21.4e-3,[0 0 1],0,-pi/3)
-Transducer.add_circle([0 0 49e-3],18,32.4e-3,[0 0 1],0,-pi/4)
+%Ã–vre
+Transducer.add_circle([0 0 56e-3],6,10.5e-3,[0 0 1],0,-atan(10.5\56))
+Transducer.add_circle([0 0 53e-3],12,21.4e-3,[0 0 1],0,-atan(21.4\53))
+Transducer.add_circle([0 0 49e-3],18,32.4e-3,[0 0 1],0,-atan(32.4\49))
 
 %Undre
-Transducer.add_circle([0 0 -56e-3],6,10.5e-3,[0 0 1],0,pi/2)
-Transducer.add_circle([0 0 -53e-3],12,21.4e-3,[0 0 1],0,pi/3)
-Transducer.add_circle([0 0 -49e-3],18,32.4e-3,[0 0 1],0,pi/4)
+Transducer.add_circle([0 0 -56e-3],6,10.5e-3,[0 0 1],0,atan(10.5\56))
+Transducer.add_circle([0 0 -53e-3],12,21.4e-3,[0 0 1],0,atan(21.4\53))
+Transducer.add_circle([0 0 -49e-3],18,32.4e-3,[0 0 1],0,atan(32.4\49))
 %[tot_p,tot_px,tot_py,tot_pz,near] = Transducer.total_tryck([0 0 0]);
 
 % Transducer.draw_all(1)
