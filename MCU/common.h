@@ -11,9 +11,9 @@
 extern void gen_LAT_vects();
 #define PRESCALE_TMR 4
 #endif
-#define PERIOD 62   //Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
+#define PERIOD 60//Pbclk/40kHz/2^PRESCALE_TMR =  1000/2^PRESCALE_TMR
 #define FAS(t) t*PERIOD/250
-#define TMR_MAX 61  //PERIOD - 1
+#define TMR_MAX 59//(PERIOD - 1)
 #define N_SIGNALS 26
 
 #ifdef MCU_PROTOTYP
@@ -29,23 +29,23 @@ extern volatile unsigned char phase_shift;
 extern void init_LAT_vects();
 #else
 #endif
-#define DUTY PERIOD/2 //PERIOD/2 for 50% duty cycle
+#define DUTY 20//PERIOD/2 //PERIOD/2 for 50% duty cycle
 #ifdef MCU_SLAVE
-#define CACHE_SIZE 38
+#define CACHE_SIZE 5//40
 
 typedef uint16_t LAT_t;
 
 struct signal {
     unsigned char up;
 };
-#define SET_SIGNAL(signal,delay) signal.up = delay
+#define SET_SIGNAL(signal,delay) (signal).up = delay
 extern volatile struct signal signal_array[N_SIGNALS];
 extern volatile LAT_t LATA_cache[CACHE_SIZE][PERIOD],
         LATB_cache[CACHE_SIZE][PERIOD],LATC_cache[CACHE_SIZE][PERIOD];
 extern volatile LAT_t *volatile LATA_vect, *volatile LATB_vect, *volatile LATC_vect;
 #endif
 #ifdef MCU_MASTER
-extern void gen_LAT_vects_sequence(char *phases, char *LAT_vects);
+extern void gen_LAT_vects_sequence(unsigned char *phases, char *LAT_vects);
 #endif
 
 struct pin_struct {

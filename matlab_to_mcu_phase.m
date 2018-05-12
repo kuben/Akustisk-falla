@@ -17,7 +17,6 @@ function mcu_phase = matlab_to_mcu_phase(phase_vector,radians)
 %           46:48 50 51 55:57 59 61 65 67:70 73 74 76 79 81 83 ...
 %           91:93 95 96 99 105 107 109 113 116];
 %fel_pol = fel_pol + 1;
-%fel_pol = fel_pol
 %pv(fel_pol) = mod(pv(fel_pol) + 125,250);
 
 pv(pv == 10) = 11;%Matlab eller USB-TTL kabeln tolkar 10 som newline

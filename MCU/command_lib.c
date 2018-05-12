@@ -38,15 +38,16 @@ int transmit(char *new_status, ...) {
 int shift_queue(){
     int i;
     for(i = 1;i < SPI_QUEUE_LEN;i++){
-        if(spi_queue[i].slave_id == -1){//Empty, stop shifting
-            break;
-        }
         spi_queue[i-1].slave_id = spi_queue[i].slave_id;
         spi_queue[i-1].pos = -1;
         spi_queue[i-1].command = spi_queue[i].command;
         int j;
         for(j = 0;j < comm_len[spi_queue[i].command];j++){
             spi_queue[i-1].data[j] = spi_queue[i].data[j];
+        }
+        
+        if(spi_queue[i].slave_id == -1){//Empty, stop shifting
+            break;
         }
     }
     if(i == 1) return 1;//Queue is now empty
@@ -102,10 +103,10 @@ void stop_sequence(){
 #endif
 #ifndef MCU_MASTER
 void begin_LAT_vects_sequence(){
-    LATB_vect = sequence.LATB_seq_begin;//Go to first vector
+    LATB_vect = LATB_cache[sequence.begin];//Go to first vector
 #ifdef MCU_SLAVE
-    LATA_vect = sequence.LATA_seq_begin;
-    LATC_vect = sequence.LATC_seq_begin;
+    LATA_vect = LATA_cache[sequence.begin];
+    LATC_vect = LATC_cache[sequence.begin];
 #endif
 }
 #endif
@@ -118,17 +119,27 @@ void increment_LAT_vects(){
 }
 #endif
 #ifdef MCU_SLAVE
-void increment_LAT_vects(volatile LAT_t *LA_vect, volatile LAT_t *LB_vect, volatile LAT_t *LC_vect){
-    LA_vect += PERIOD;//Point to next vector
-    LB_vect += PERIOD;
-    LC_vect += PERIOD;
-    if(LB_vect >= LATB_cache[CACHE_SIZE]){//If pointing beyond cache vector
-        LA_vect = LATA_cache[0];
-        LB_vect = LATB_cache[0];
-        LC_vect = LATC_cache[0];
-    }
+void increment_LAT_vects(){
+    sequence.current++;
+    if(sequence.current >= CACHE_SIZE) sequence.current = 0;
+    LATB_vect = LATB_cache[sequence.current];
+#ifdef MCU_SLAVE
+    LATA_vect = LATA_cache[sequence.current];
+    LATC_vect = LATC_cache[sequence.current];
+#endif
 }
-
+void increment_seq_begin_vects(){
+    sequence.begin++;
+    if(sequence.begin >= CACHE_SIZE) sequence.begin = 0;
+}
+void increment_seq_end_vects(){
+    sequence.end++;
+    if(sequence.end >= CACHE_SIZE) sequence.end = 0;
+}
+void reset_seq_vects(){
+    sequence.begin = sequence.current;
+    sequence.end = sequence.current;
+}
 #endif
 void restart_command_timeout(){
     TMR2 = 0;    // Clear counter
@@ -158,8 +169,8 @@ void __ISR (_TIMER_4_VECTOR, IPL1SOFT) SPI_Timer_Interrupt(void)
             PIN_CLR(PIN_YELLOW);
             T4CONbits.TON = 0;
         } else {
-            IEC1bits.SPI1TXIE = 1;
             T4CONbits.TON = 0;
+            IEC1bits.SPI1TXIE = 1;
         }
     }
     IFS0bits.T4IF = 0;
@@ -172,6 +183,15 @@ void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
     //Command has timed out
 #ifndef MCU_SLAVE
     transmit("Command %c timed out, args received: %i",command.comm[0],command.next_idx -1);
+#else
+    volatile int i;
+    for(i=0;i<1000000;i++){
+        int tmr = TMR4;
+        uint32_t sig = (tmr>55)?-1:0;
+        LATA = sig;
+        LATB = sig;
+        LATC = sig;
+    }
 #endif
     command.next_idx = 0;
     clear_command_timeout();
@@ -182,17 +202,17 @@ void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
 void __ISR (_TIMER_5_VECTOR, IPL1SOFT) Sequence_Timer_Interrupt(void)
 {
     //First determine if we are at the end of a sequence
-    if(LATB_vect == sequence.LATB_seq_end){
+    if(sequence.current == sequence.end){
         //If pointing to the last vect in sequence and n == 1 then end the sequence
         if (sequence.n == 1){
             stop_sequence();
         } else {
-            begin_LAT_vects_sequence();
-            //If not zero then decrement remaining repetitions
+            begin_LAT_vects_sequence();//Restart the sequence
+            //If not zero then decrement remaining repetitions (zero is loop)
             if (sequence.n > 1) sequence.n--;
         }
     } else {
-        increment_LAT_vects(LATA_vect, LATB_vect, LATC_vect);//Point to next LAT_vect
+        increment_LAT_vects();//Point to next LAT_vect
     }
 	IFS0bits.T5IF = 0;//Reset interrupt flag
 }
@@ -220,22 +240,20 @@ void receive_command_char(char rx) {
                 break;
 #ifdef MCU_SLAVE
             case 'y'://Sync
+                //increment_LAT_vects();
                 TMR4 = 0;
                 break;
             case 'b'://Begin sequence
-                sequence.LATA_seq_begin = (LAT_t *)LATA_vect;
-                sequence.LATB_seq_begin = (LAT_t *)LATB_vect;
-                sequence.LATC_seq_begin = (LAT_t *)LATC_vect;
-                sequence.LATA_seq_end = (LAT_t *)LATA_vect;
-                sequence.LATB_seq_end = (LAT_t *)LATB_vect;
-                sequence.LATC_seq_end = (LAT_t *)LATC_vect;
-                increment_LAT_vects(sequence.LATA_seq_begin,sequence.LATB_seq_begin, sequence.LATC_seq_begin);//Next vectors will be beginning
+                reset_seq_vects();
+                increment_seq_begin_vects();//Next vectors will be beginning
+                break;
+            default:
                 break;
 #else
 #ifdef MCU_MASTER          
             case 'b'://Begin sequence
                 //Id 5 means all. No arguments so passing 0 pointer
-                if(queue_SPI_tx(5, 'n', 0)) transmit("%c: Failed, queue full.", command.comm[0]);
+                if(queue_SPI_tx(5, 'b', 0)) transmit("%c: Failed, queue full.", command.comm[0]);
                 else transmit("%c: Success!",command.comm[0]);
                 break;          
             case 'y'://Sync
@@ -277,7 +295,6 @@ void receive_command_char(char rx) {
 #ifndef MCU_PROTOTYP
 void __ISR(_SPI1_VECTOR, IPL2SOFT) SPI_Interrupt(void) 
 {
-    
 #ifdef MCU_SLAVE
     if(SPI1STATbits.SPIROV){//Overflow has occurred
         SPI1STATbits.SPIROV = 0;
@@ -357,7 +374,7 @@ int command_set_all() {
 }
 
 int command_set_single() {
-    if ((command.comm[0] != 's') && (command.next_idx != 2)) return 1;
+    if ((command.comm[0] != 's') || (command.next_idx != 2)) return 1;
     set_single(command.comm[1],command.comm[2]);
     gen_LAT_vects();
     return 0;
@@ -435,7 +452,8 @@ int command_init_sequence() {
     if ((command.comm[0] != 'i') || (command.next_idx != 3)) return 1;
     stop_sequence();//Abort ongoing sequence
     sequence.n = command.comm[1];
-    uint16_t count = (((command.comm[2]<<8) + command.comm[3])*16-1) & 0xffff;
+    uint32_t count = ((command.comm[2]<<8) + command.comm[3])*16-1;
+    if (count & 0xffff0000) count = 0xffff;//Overflow
     //Set up timer (let timer handle turning off itself)
     T5CONbits.TCKPS = 7;//Prescale 1:256
     PR5 = count;
@@ -448,18 +466,30 @@ int command_init_sequence() {
  * Arguments are LAT_vects
 */
 int command_next_in_sequence() {
-    if (command.comm[0] != 'n' || command.next_idx != 2*3*PERIOD+1) return 1;
+    if (command.comm[0] != 'n' || command.next_idx != 2*3*PERIOD) return 1;
     stop_sequence();//Abort ongoing sequence
-    increment_LAT_vects(sequence.LATA_seq_end,
-            sequence.LATB_seq_end, sequence.LATC_seq_end);
-    uint16_t *LATA = (uint16_t *)command.comm+1;
-    uint16_t *LATB = LATA + PERIOD;
-    uint16_t *LATC = LATB + PERIOD;
+    increment_seq_end_vects();
     int t;
-    for (t=0;t<PERIOD;t++){
-        sequence.LATA_seq_end[t] = LATA[t];
-        sequence.LATB_seq_end[t] = LATB[t];
-        sequence.LATC_seq_end[t] = LATC[t];
+    volatile int i;
+    int end = sequence.end;
+    for(i=0;i<1000000;i++){
+        int tmr = TMR4;
+        uint32_t sig = ((end > 0) && (end <= 10))?((tmr%(end)>end/2)?-1:0):-1;
+        LATA = sig;
+        LATB = sig;
+        LATC = sig;
+    }
+    for (t = 1;t<PERIOD;t++){
+        LATA_cache[3][t] = (command.comm[1+2*t]<<8) + command.comm[2+2*t];
+        LATB_cache[3][t] = (command.comm[1+2*t+2*PERIOD]<<8) + command.comm[2+2*t+2*PERIOD];
+        LATC_cache[3][t] = (command.comm[1+2*t+4*PERIOD]<<8) + command.comm[2+2*t+4*PERIOD];
+    }
+    for(i=0;i<1000000;i++){
+        int tmr = TMR4;
+        uint32_t sig = (tmr%(50/6)>50/12)?-1:0;
+        LATA = sig;
+        LATB = sig;
+        LATC = sig;
     }
     return 0;
 }

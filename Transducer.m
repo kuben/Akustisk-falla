@@ -15,11 +15,10 @@ classdef Transducer < handle
         x_min = -5e-2; x_max = 5e-2;
         y_min = -5e-2; y_max = 5e-2;
         z_min = -7e-2; z_max = 7e-2;
-        
+        plane_n = 100;
    end
    properties 
         phase
-        plane_n = 100;
     end
     %Instansmetoder
     methods

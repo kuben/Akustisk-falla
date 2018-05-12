@@ -28,14 +28,12 @@ int transmit(char *new_status, ...);
 
 #ifndef MCU_MASTER
 struct Sequence {
-    LAT_t *LATB_seq_begin, *LATB_seq_end;//First and lasts vectors in sequence
-#ifdef MCU_SLAVE
-    LAT_t *LATA_seq_begin, *LATC_seq_begin;//Slave also uses A, B and C
-    LAT_t *LATA_seq_end, *LATC_seq_end;//Slave also uses A, B and C
-#endif
+    int begin;//First and lasts vectors in sequence
+    int current;
+    int end;
     int n;//Number of times sequence is to be played
 };
-static volatile struct Sequence sequence = {};
+static volatile struct Sequence sequence = {0};
 #endif
 
 #ifdef MCU_MASTER
@@ -46,7 +44,8 @@ struct SPI_transmission {
     char command;//'a' or 's' or others
     char data[3*2*PERIOD];
 };
-static const uint16_t comm_len[256] = {['a'] = 26, ['s'] = 2, ['n'] = 3*2*PERIOD};
+static const uint16_t comm_len[256] = {['a'] = 26, ['s'] = 2, ['n'] = 3*2*PERIOD
+        , ['i'] = 3, ['b'] = 0, ['y'] = 0, 0};
 
 
 //#define TRANSMITTING (tx_buffer.pos > -1)
@@ -61,10 +60,11 @@ int queue_SPI_tx(int slave_id, char command, volatile unsigned char *data);
 int set_single(int num, char val);
 #else
 void stop_sequence();
-#ifdef MCU_SLAVE
-void increment_LAT_vects(volatile LAT_t *LA_vect, volatile LAT_t *LB_vect, volatile LAT_t *LC_vect);
-#else
 void increment_LAT_vects();
+#ifdef MCU_SLAVE
+void increment_seq_begin_vects();
+void increment_seq_end_vects();
+void reset_seq_vects();
 #endif
 void begin_LAT_vects_sequence();
 #endif
