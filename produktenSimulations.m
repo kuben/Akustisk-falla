@@ -1,6 +1,6 @@
-% Test fil för produkten
 %% Placement of Transducers
 clc, clear, close all, Transducer.clear_all()
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
 
 % Vital constants for the geometry
 Rbase = 12e-3; % m
@@ -20,10 +20,10 @@ end
 %% Optimisation
 
 tic
-[minLaplPhase,~] = BFGS([0,0,0]);
+[minLaplPhase,minLaplVal] = BFGS([0,0,0]);
 produktenTime = toc;
 
-%% Save phases
+% Save phases
 
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
 save('Konstanter\produktenTest.mat','minLaplPhase','produktenTime','minLaplVal','height');
@@ -33,16 +33,24 @@ save('Konstanter\produktenTest.mat','minLaplPhase','produktenTime','minLaplVal',
 
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
 load('Konstanter\produktenTest.mat');
-
+load('Konstanter\horisontalMovement.mat')
 xvec = -linspace(0,10e-2,200);
 
-horisontalPhase = zeros(length(xvec),122);
-horisontalVal = zeros(length(xvec),1);
-horisontalTime = zeros(length(xvec),1);
+if ~exist('horisontalPhase','var')
+    horisontalPhase = zeros(length(xvec),122);
+    if exist('minLaplPhase','var')
+        horisontalPhase(1,:) = minLaplPhase;
+    end
+end
+if ~exist('horisontalVal','var')
+    horisontalVal = zeros(length(xvec),1);
+end
+if ~exist('horisontalTime','var')
+    horisontalTime = zeros(length(xvec),1);
+end
 
-horisontalPhase(1,:) = minLaplPhase;
-
-for i = 1:length(xvec)
+startI = find(horisontalTime == 0,1,'first');
+for i = startI:length(xvec)
     tic
     disp(i)
     [horisontalPhase(i,:),horisontalVal(i)] = BFGS([xvec(i),0,0],horisontalPhase(max(1,i-1),:),false);
@@ -58,17 +66,25 @@ save('Konstanter\horisontalMovement.mat','horisontalPhase','horisontalTime','hor
 
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
 load('Konstanter\produktenTest.mat');
+load('Konstanter\upwardsMovement.mat')
 
 zvec = linspace(0,5e-2,200);
 
-upwardsPhase = zeros(length(zvec),122);
-upwardsVal = zeros(length(zvec),1);
-upwardsTime = zeros(length(zvec),1);
+if ~exist('upwardsPhase','var')
+    upwardsPhase = zeros(length(zvec),122);
+    if exist('minLaplPhase','var')
+        upwardsPhase(1,:) = minLaplPhase;
+    end
+end
+if ~exist('upwardsVal','var')
+    upwardsVal = zeros(length(zvec),1);
+end
+if ~exist('upwardsTime','var')
+    upwardsTime = zeros(length(zvec),1);
+end
 
-upwardsPhase(1,:) = minLaplPhase;
-
-
-for i = 1:length(zvec)
+startI = find(upwardsTime == 0,1,'first');
+for i = startI:length(zvec)
     tic
     disp(i)
     [upwardsPhase(i,:),upwardsVal(i)] = BFGS([0,0,zvec(i)],upwardsPhase(max(1,i-1),:),false);
@@ -83,16 +99,26 @@ end
 
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
 load('Konstanter\produktenTest.mat');
+load('Konstanter\downwardsMovement.mat');
 
 zvec = -linspace(0,5e-2,200);
 
-downwardsPhase = zeros(length(zvec),122);
-downwardsVal = zeros(length(zvec),1);
-downwardsTime = zeros(length(zvec),1);
+if ~exist('downwardsPhase','var')
+    downwardsPhase = zeros(length(zvec),122);
+    if exist('minLaplPhase','var')
+        downwardsPhase(1,:) = minLaplPhase;
+    end
+end
+if ~exist('downwardsVal','var')
+    downwardsVal = zeros(length(zvec),1);
+end
+if ~exist('downwardsTime','var')
+    downwardsTime = zeros(length(zvec),1);
+end
+    
 
-downwardsPhase(1,:) = minLaplPhase;
-
-for i = 1:length(zvec)
+startI = find(downwardsTime == 0,1,'first');
+for i = startI:length(zvec)
     tic
     disp(i)
     [downwardsPhase(i,:),downwardsVal(i)] = BFGS([0,0,zvec(i)],downwardsPhase(max(1,i-1),:),false);
@@ -121,40 +147,64 @@ save('produktTranslatedPhases.mat', 'normPhases', 'intPhases','plateHeight')
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
 load('Konstanter\produktenTest.mat');
 %% Pressure Weigthing Factor 1
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
+load('Konstanter\produktenTest.mat','minLaplPhase');
+load('Konstanter\pressureWeightingFactor1.mat')
 
-presFactor = logspace(-9,9,200);
+presFactor1 = logspace(-9,9,200);
 
-weightPhases = zeros(200,122);
-weightTime = zeros(200,1);
-weightVal = zeros(200,1);
-
-for i = 1:length(presFactor)
-    disp(i)
-    tic;
-    [weightPhases(i,:),weightVal(i)] = BFGS([0,0,0],minLaplPhase,false,100,presFactor(i));
-    weightTime(i) = toc;
-    save('Konstanter\pressureWeightingFactor1.mat','weightPhases','weightTime','weightVal')
+if ~exist('weightPhases1','var')
+    if exist('minLaplPhase','var')
+        weightPhases1 = repmat(minLaplPhase,200,1);
+    else
+        weightPhases1 = zeros(length(presFactor1),200,1);
+    end
+end
+if ~exist('weightTime1','var')
+    weightTime1 = zeros(200,1);
+end
+if ~exist('weightVal1','var')
+    weightVal1 = zeros(200,122);
 end
 
-save('Konstanter\pressureWeightingFactor1.mat','weightPhases','weightTime','weightVal','presFactor')
+startI = find(weightTime1 == 0,1,'first');
+for i = startI:length(presFactor1)
+    disp(i)
+    tic;
+    [weightPhases1(i,:),weightVal1(i)] = BFGS([0,0,0],minLaplPhase,false,100,presFactor1(i));
+    weightTime1(i) = toc;
+    save('Konstanter\pressureWeightingFactor1.mat','weightPhases1','weightTime1','weightVal1','presFactor1')
+end
 
 %% Pressure Weigthing Factor 2
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
+load('Konstanter\produktenTest.mat','minLaplPhase');
+load('Konstanter\pressureWeightingFactor2.mat')
 
-presFactor = logspace(-3,3,200);
+presFactor2 = logspace(-3,3,200);
 
-weightPhases = zeros(200,122);
-weightTime = zeros(200,1);
-weightVal = zeros(200,122);
-
-for i = 1:length(presFactor)
-    disp(i)
-    tic;
-    [weightPhases(i,:),weightVal(i)] = BFGS([0,0,0],minLaplPhase,false,0,presFactor(i));
-    weightTime(i) = toc;
-    save('Konstanter\pressureWeightingFactor2.mat','weightPhases','weightTime','weightVal')
+if ~exist('weightPhases1','var')
+    if exist('minLaplPhase','var')
+        weightPhases2 = repmat(minLaplPhase,200,1);
+    else
+        weightPhases2 = zeros(length(presFactor2),200,1);
+    end
+end
+if ~exist('weightTime2','var')
+    weightTime2 = zeros(200,1);
+end
+if ~exist('weightVal2','var')
+    weightVal2 = zeros(200,122);
 end
 
-save('Konstanter\pressureWeightingFactor2.mat','weightPhases','weightTime','weightVal','presFactor')
+startI = find(weightTime2 == 0,1,'first');
+for i = startI:length(presFactor2)
+    disp(i)
+    tic;
+    [weightPhases2(i,:),weightVal2(i)] = BFGS([0,0,0],minLaplPhase,false,0,presFactor2(i));
+    weightTime2(i) = toc;
+    save('Konstanter\pressureWeightingFactor2.mat','weightPhases2','weightTime2','weightVal2','presFactor2')
+end
 
 
 %% Different plate heights
@@ -164,18 +214,24 @@ clc, clear, close all, Transducer.clear_all()
 
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master\';
 load('Konstanter\produktenTest.mat','minLaplPhase');
+load('Konstanter\differentHeights.mat')
 
 % Vital constants for the geometry
 Rbase = 12e-3; % m
 heightVec = linspace(4e-2,20e-2,200); % m
 
-heightPhase = zeros(200,122);
-heightVal = zeros(200,1);
-heightTime = zeros(200,1);
+if ~exist('heightPhase','var')
+    heightPhase = zeros(200,122);
+end
+if ~exist('heightVal','var')
+    heightVal = zeros(200,1);
+end
+if ~exist('heightTime','var')
+    heightTime = zeros(200,1);
+end
 
-heightPhase(1,:) = [1.18838733784846 -1.23121563481394 -1.28247032448650 -1.25184934980715 5.11154355299013 -1.25184718483529 -1.28246913969660 -4.12570643337516 -4.70643117559894 -0.761073646425865 -0.746186306405201 -0.707388728592106 1.57109819709601 2.26053106533605 1.57110218853795 -0.707386224168738 -0.746182142065824 -0.761072078637862 -4.70642871412971 1.50825883340853 1.32486809307802 0.762687070907993 -1.68813294266155 -1.69433381383507 -1.66660481376238 -1.61487689079411 0.764861491851941 1.45055354977717 1.63716569754833 1.45055615524584 0.764866724561116 -1.61487347463639 -1.66660222542464 -1.69433060481625 -1.68812951625088 0.762688925946868 1.32486881158470 0.606586930525669 0.0296740815160598 -0.271904813006483 -1.39974525758139 3.03379252221866 3.01566058423575 3.04399983001778 3.06151219367145 3.13096426696073 -1.49639531223357 -0.124579133830841 0.178841561229107 0.677669608306401 0.178843147287960 -0.124575647196385 -1.49638822210490 3.13096718184317 3.06151583693337 3.04400257092690 3.01566354232947 3.03379542939367 -1.39975141673677 -0.271902603499030 0.0296746261499638 -1.96685088264181 1.97351628852974 1.89838970700164 1.86707393573184 1.91438222124787 1.86707310124330 1.89838801951428 -0.875106699869341 -1.55951639146083 2.43755877113090 2.40014387033962 2.38501195486347 -1.55660103678195 -0.979463907348538 -1.55660374394698 2.38501023191972 2.40014145202513 2.43755657613068 -1.55951943016292 -1.49988419594614 -1.68582415986116 -2.34064791679208 1.52258970425634 1.47359837799687 1.44582421421021 -4.83188322580265 -2.34614415561603 -1.81035505184428 -1.62915314863867 -1.81035644175947 -2.34614634629959 -4.83188686129416 1.44582052509543 1.47359566617581 1.52258616250893 -2.34064923302529 -1.68582641173594 -2.46859198588333 -2.97047548346417 3.01776654125508 1.70321337649311 6.26382035962214 -0.0856712091379363 -0.105277622022473 -0.132650996356923 -0.108689541419209 -4.48310061118025 -3.41283016198066 -3.12533679525538 -2.53900344835544 -3.12533918996502 -3.41283392728376 -4.48309352154970 -0.108691146397969 -0.132655378435800 -0.105281103267100 -0.0856752563387435 6.26381743650935 1.70322219867996 3.01776302755092 -2.97047664789015];
-
-for j = 1:length(heightVec)
+startI = find(heightTime == 0,1,'first');
+for j = startI:length(heightVec)
     disp(j)
     Transducer.clear_all()
     height = heightVec(j);
@@ -216,20 +272,40 @@ tic
 twoTime = toc;
 save('Konstanter\twoPot.mat','twoPhase','twoTime','twoVal');
 
+%% Test två potential gropar 2
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master'
+load('Konstanter\produktenTest.mat','minLaplPhase');
+
+pos = [2e-2,0,0;...
+      -2e-2,0,0];
+tic
+[twoPhase2,twoVal2] = BFGS_N(pos,minLaplPhase,true,400,0);
+twoTime2 = toc;
+save('Konstanter\twoPot2.mat','twoPhase2','twoTime2','twoVal2');
+
+
 %% Test rotation of two
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master'
+load('Konstanter\rotTwo.mat')
 
 r_rot = 1e-2;
 phi_rot = linspace(0,2*pi,200);
 
-rotPhase = zeros(200,122);
-rotVal = zeros(200,1);
-rotTime = zeros(200,1);
+if ~exist('rotPhase','var')
+    rotPhase = zeros(200,122);
+end
+if ~exist('rotVal','var')
+    rotVal = zeros(200,1);
+end
+if ~exist('rotTime','var')
+    rotTime = zeros(200,1);
+end
 
-for i = 1:length(phi_rot)
+startI = find(rotTime == 0,1,'first');
+for i = startI:length(phi_rot)
     disp(i)
-    x = real(r_rot*exp(1i*rotPhase(i)));
-    z = imag(r_rot*exp(1i*rotPhase(i)));
+    x = real(r_rot*exp(1i*phi_rot(i)));
+    z = imag(r_rot*exp(1i*phi_rot(i)));
     pos = [x,0,z;
           -x,0,-z];
     tic
@@ -241,15 +317,23 @@ end
 %% Test horisontal merge of two
 
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master'
+load('Konstanter\horisontalMerge.mat')
 
-r_hmerge = linspace(0,1e-2,200);
+r_hmerge = linspace(1e-2,0,200);
 phi_hmerge = 0;
 
-% hmergePhase = zeros(200,122);
-% hmergeVal = zeros(200,1);
-% hmergeTime = zeros(200,1);
+if ~exist('hmergePhase','var')
+    hmergePhase = zeros(200,122);
+end
+if ~exist('hmergeVal','var')
+    hmergeVal = zeros(200,1);
+end
+if ~exist('hmergeTime','var')
+    hmergeTime = zeros(200,1);
+end
 
-for i = 170:length(r_hmerge)
+startI = find(hmergeTime == 0,1,'first');
+for i = startI:length(r_hmerge)
     disp(i)
     x = real(r_hmerge(i)*exp(1i*phi_hmerge));
     z = imag(r_hmerge(i)*exp(1i*phi_hmerge));
@@ -264,15 +348,23 @@ end
 %% Test vertical merge of two
 
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master'
+load('Konstanter\verticalMerge.mat')
 
-r_vmerge = linspace(0,1e-2,200);
+r_vmerge = linspace(1e-2,0,200);
 phi_vmerge = 90;
 
-vmergePhase = zeros(200,122);
-vmergeVal = zeros(200,1);
-vmergeTime = zeros(200,1);
+if ~exist('vmergePhase','var')
+    vmergePhase = zeros(200,122);
+end
+if ~exist('vmergeVal','var')
+    vmergeVal = zeros(200,1);
+end
+if ~exist('vmergeTime','var')
+    vmergeTime = zeros(200,1);
+end
 
-for i = 1:length(r_vmerge)
+startI = find(vmergeTime == 0,1,'first');
+for i = startI:length(r_vmerge)
     disp(i)
     x = real(r_vmerge(i)*exp(1i*phi_vmerge));
     z = imag(r_vmerge(i)*exp(1i*phi_vmerge));
@@ -287,21 +379,29 @@ end
 
 %% Infinity xz horisontal
 cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master'
+load('Konstanter\xzhInf1.mat')
 
 r_xzhinf = 1e-2;
 phi_xzhinf = [linspace(-pi,pi,100),flip(linspace(0,2*pi,100))]';
 x_shift = [ones(100,1)*r_xzhinf;-ones(100,1)*r_xzhinf];
 
-xzhinfPhase = zeros(200,122);
-xzhinfVal = zeros(200,1);
-xzhinfTime = zeros(200,1);
+if ~exist('xzhinfPhase','var')
+    xzhinfPhase = zeros(200,122);
+end
+if ~exist('xzhinfVal','var')
+    xzhinfVal = zeros(200,1);
+end
+if ~exist('xzhinfTime','var')
+    xzhinfTime = zeros(200,1);
+end
 
-for i = 1:length(phi_xzhinf)
+startI = find(xzhinfTime == 0,1,'first');
+for i = startI:length(phi_xzhinf)
     disp(i)
     x = real(r_xzhinf*exp(1i*phi_xzhinf(i)))+x_shift(i);
     z = imag(r_xzhinf*exp(1i*phi_xzhinf(i)));
-    pos = [x,0,z;
-          -x,0,-z];
+    pos = [x,0,z];
+          %-x,0,-z];
     tic
     [xzhinfPhase(i,:),xzhinfVal(i)] = BFGS_N(pos,xzhinfPhase(max(1,i-1),:));
     xzhinfTime(i) = toc;
@@ -309,7 +409,67 @@ for i = 1:length(phi_xzhinf)
 end
 
 
+%% Infinity xy horisontal
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master'
+load('Konstanter\xyhInf1.mat')
 
+r_xyhinf = 1e-2;
+phi_xyhinf = [linspace(-pi,pi,100),flip(linspace(0,2*pi,100))]';
+x_shift = [ones(100,1)*r_xyhinf;-ones(100,1)*r_xyhinf];
+
+if ~exist('xyhinfPhase','var')
+    xyhinfPhase = zeros(200,122);
+end
+if ~exist('xyhinfVal','var')
+    xyhinfVal = zeros(200,1);
+end
+if ~exist('xyhinfTime','var')
+    xyhinfTime = zeros(200,1);
+end
+
+startI = find(xyhinfTime == 0,1,'first');
+for i = startI:length(phi_xyhinf)
+    disp(i)
+    x = real(r_xyhinf*exp(1i*phi_xyhinf(i)))+x_shift(i);
+    y = imag(r_xyhinf*exp(1i*phi_xyhinf(i)));
+    pos = [x,y,0];
+          %-x,-y,0];
+    tic
+    [xyhinfPhase(i,:),xyhinfVal(i)] = BFGS_N(pos,xyhinfPhase(max(1,i-1),:));
+    xyhinfTime(i) = toc;
+    save('Konstanter\xyhInf1.mat','xyhinfPhase','xyhinfTime','xyhinfVal');
+end
+
+
+%% Tri crosshair xz-rotation
+cd 'Z:\.win\My Documents\Skolarbete\Kandidatarbete\Matlab\Akustisk-falla-master\Akustisk-falla-master'
+load('Konstanter\triCrossRot.mat')
+
+r_triCross = 2e-2;
+phi_triCross = linspace(0,2*pi,200)';
+
+if ~exist('triCrossPhase','var')
+    triCrossPhase = zeros(200,122);
+end
+if ~exist('triCrossVal','var')
+    triCrossVal = zeros(200,1);
+end
+if ~exist('triCrossTime','var')
+    triCrossTime = zeros(200,1);
+end
+
+startI = find(triCrossTime == 0,1,'first');
+for i = startI:length(phi_triCross)
+    disp(i)
+    x = [real(r_triCross*exp(1i*(phi_triCross(i)+[0,2*pi/3,4*pi/3])))';0];
+    y = [0; 0; 0; 0];
+    z = [imag(r_triCross*exp(1i*(phi_triCross(i)+[0,2*pi/3,4*pi/3])))';0];
+    pos = [x,y,z];
+    tic
+    [triCrossPhase(i,:),triCrossVal(i)] = BFGS_N(pos,triCrossPhase(max(1,i-1),:));
+    triCrossTime(i) = toc;
+    save('Konstanter\triCrossRot.mat','triCrossPhase','triCrossTime','triCrossVal');
+end
 
 
 
