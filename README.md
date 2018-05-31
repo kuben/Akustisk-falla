@@ -16,5 +16,6 @@ laplFunPhase.m               -   Beräknar värdet av laplacianen av Gorkov pote
 
 
 Vi har följande underdirectories
+
 Konstanter                   -   Här sparas och avläses konstanter från fasoptimering.
 MCU                          -   Kod till styrning av MCU.
