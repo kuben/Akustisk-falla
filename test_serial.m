@@ -37,8 +37,37 @@ in_phases = upwardsPhase;
 for l = 1%:1:size(in_phases,1)
     all_vect = matlab_to_mcu_phase(in_phases(l,:),1);
     %all_vect = matlab_to_mcu_phase(in_phases(l,:),0);
-    out = send_uart(s,['n' all_vect])
+    %out = send_uart(s,['n' all_vect])
 %    pause()
+end
+%% Generera kod enkel
+in_phases = upwardsPhase;
+for l = 1%:1:size(in_phases,1)
+    all_vect = matlab_to_mcu_phase(in_phases(l,:),1);
+end
+for slave_id = 0:4
+    fprintf('#ifdef SLAVE%d\n    ',slave_id)
+    for i = 0:25
+        fprintf('SET_SIGNAL(signal_array[%d],%d); ',i,all_vect(1 + i + 26*slave_id))
+    end
+    fprintf('\n#endif\n')
+end
+%% Generera kod kö
+in_phases = upwardsPhase;
+idxs = round(linspace(1,size(in_phases,1),5));
+for l = 1:length(idxs)
+    all_vect(l,:) = idxs(l)*ones(1,130);%matlab_to_mcu_phase(in_phases(idxs(l),:),1);
+end
+for slave_id = 0:4
+    fprintf('#ifdef SLAVE%d\n',slave_id)
+    for l = 1:size(all_vect,1)
+        fprintf('    ');
+        for i = 0:25
+            fprintf('SET_SIGNAL(signal_array[%d],%d); ',i,all_vect(l,1 + i + 26*slave_id))
+        end
+        fprintf('gen_LAT_vects(); increment_LAT_vects();\n')
+    end
+    fprintf('#endif\n')
 end
 %% Produkt init
 period_dur = 10;%ms

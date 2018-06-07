@@ -9,6 +9,7 @@
 #pragma config IESO = OFF               // Internal/External Switch Over (Disabled)
 #pragma config FPLLMUL = MUL_20         // PLL Multiplier (20x Multiplier)
 #pragma config FPLLODIV = DIV_2         // System PLL Output Clock Divider (PLL Divide by 2)
+#pragma config FPLLIDIV = DIV_10
 #ifdef PRAGMA_SLAVE
 //Slave receives 40MHz clock on PRI
 #pragma config FNOSC = PRI
@@ -118,31 +119,23 @@ int main(int argc, char** argv) {
 #ifdef MCU_PROTOTYP
     init_LAT_vects();
 #endif
-    /*int l;
-    for (l=0;l < CACHE_SIZE;l++){
-        int i;
-        for (i = 0;i < N_SIGNALS; i++){
-            SET_SIGNAL(signal_array[i],(l*250)/CACHE_SIZE);
-        }
-        SET_SIGNAL(signal_array[19],0);
-        gen_LAT_vects();
-        increment_LAT_vects();
-    }*/
     gen_LAT_vects();
 #endif
     
+    /* For debugging: toggles all ports for a few seconds
     volatile int i;
-    //for(i=0;i<10000000;i++){
+    for(i=0;i<10000000;i++){
         int tmr = TMR4;
         uint32_t sig = (tmr>30)?-1:0;
         LATA = sig;
         LATB = sig;
         LATC = sig;
-    //}
+    }*/
+    
     //Run
     while(1) {
 #ifdef MCU_SLAVE
-        int tmr = TMR4;//32bit int saves us one asm instruction (zeroing out initial bits)
+        int tmr = TMR4;
         LATA = LATA_vect[tmr];
         LATB = LATB_vect[tmr];
         LATC = LATC_vect[tmr];
@@ -257,7 +250,6 @@ void init_signals(){
         PIN_CONF_OUTPUT(outputs[i]);
         SET_SIGNAL(signal_array[i],0);
     }
-    //SET_SIGNAL(signal_array[19],0);
 #endif
 #ifdef MCU_PROTOTYP
     PIN_CONF_OUTPUT(outputs[0]);

@@ -184,14 +184,6 @@ void __ISR (_TIMER_3_VECTOR, IPL1SOFT) Command_Timer_Interrupt(void)
 #ifndef MCU_SLAVE
     transmit("Command %c timed out, args received: %i",command.comm[0],command.next_idx -1);
 #else
-    volatile int i;
-    for(i=0;i<1000000;i++){
-        int tmr = TMR4;
-        uint32_t sig = (tmr>55)?-1:0;
-        LATA = sig;
-        LATB = sig;
-        LATC = sig;
-    }
 #endif
     command.next_idx = 0;
     clear_command_timeout();
@@ -240,7 +232,6 @@ void receive_command_char(char rx) {
                 break;
 #ifdef MCU_SLAVE
             case 'y'://Sync
-                //increment_LAT_vects();
                 TMR4 = 0;
                 break;
             case 'b'://Begin sequence
@@ -470,26 +461,11 @@ int command_next_in_sequence() {
     stop_sequence();//Abort ongoing sequence
     increment_seq_end_vects();
     int t;
-    volatile int i;
     int end = sequence.end;
-    for(i=0;i<1000000;i++){
-        int tmr = TMR4;
-        uint32_t sig = ((end > 0) && (end <= 10))?((tmr%(end)>end/2)?-1:0):-1;
-        LATA = sig;
-        LATB = sig;
-        LATC = sig;
-    }
     for (t = 1;t<PERIOD;t++){
         LATA_cache[3][t] = (command.comm[1+2*t]<<8) + command.comm[2+2*t];
         LATB_cache[3][t] = (command.comm[1+2*t+2*PERIOD]<<8) + command.comm[2+2*t+2*PERIOD];
         LATC_cache[3][t] = (command.comm[1+2*t+4*PERIOD]<<8) + command.comm[2+2*t+4*PERIOD];
-    }
-    for(i=0;i<1000000;i++){
-        int tmr = TMR4;
-        uint32_t sig = (tmr%(50/6)>50/12)?-1:0;
-        LATA = sig;
-        LATB = sig;
-        LATC = sig;
     }
     return 0;
 }

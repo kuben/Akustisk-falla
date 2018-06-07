@@ -47,6 +47,13 @@ extern volatile LAT_t *volatile LATA_vect, *volatile LATB_vect, *volatile LATC_v
 #ifdef MCU_MASTER
 extern void gen_LAT_vects_sequence(unsigned char *phases, char *LAT_vects);
 #endif
+extern void increment_LAT_vects();
+#ifdef MCU_SLAVE
+extern void increment_seq_begin_vects();
+extern void increment_seq_end_vects();
+extern void reset_seq_vects();
+#endif
+extern void begin_LAT_vects_sequence();
 
 struct pin_struct {
     uint32_t A_mask;
